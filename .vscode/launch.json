@@ -1,0 +1,58 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Ryu Controller (OpenFlow 1.3)",
+      "type": "python",
+      "request": "launch",
+      "module": "ryu.cmd.manager",
+      "args": [
+        "${workspaceFolder}/controller/main_controller.py",
+        "--observe-links"
+      ],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}:${workspaceFolder}/agent:${workspaceFolder}/controller"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Train Multi-Agent DRL (1000 Episodes)",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/benchmark_evaluation.py",
+      "args": ["1000"],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}:${workspaceFolder}/agent:${workspaceFolder}/controller"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Run Unit Test Suite",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/test_suite.py",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}:${workspaceFolder}/agent:${workspaceFolder}/controller"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Mininet Network Topology (Requires Sudo)",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/topology/mininet_topo.py",
+      "console": "integratedTerminal",
+      "sudo": true
+    },
+    {
+      "name": "Simulate Live Traffic Driver",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/simulate_live_traffic.py",
+      "console": "integratedTerminal"
+    }
+  ]
+}

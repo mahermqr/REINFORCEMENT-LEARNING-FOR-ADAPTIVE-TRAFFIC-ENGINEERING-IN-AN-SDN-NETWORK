@@ -1,0 +1,12 @@
+{
+  "total_training_episodes": 10000,
+  "training_duration_seconds": 147.106760263443,
+  "final_dqn_bottleneck_utilization_pct": 33.74125425768055,
+  "final_spf_bottleneck_utilization_pct": 36.467410501695475,
+  "congestion_reduction_pct": 2.7261562440149234,
+  "final_dqn_latency_ms": 13.297000000000002,
+  "final_spf_latency_ms": 14.156,
+  "average_multicast_bandwidth_conserved_mbps": 58.322,
+  "final_ddos_detection_accuracy_pct": 100.0,
+  "final_ddos_false_positive_rate_pct": 0.0
+}

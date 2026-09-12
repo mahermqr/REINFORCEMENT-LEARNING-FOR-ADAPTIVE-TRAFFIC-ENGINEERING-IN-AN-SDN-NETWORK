@@ -1,0 +1,1509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autonomous SDN Traffic Engineering & DRL Intelligence Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg-base: #080c14;
+            --bg-card: rgba(15, 23, 42, 0.72);
+            --bg-card-hover: rgba(30, 41, 59, 0.85);
+            --border-glow: rgba(56, 189, 248, 0.25);
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --text-dim: #64748b;
+            
+            --cyan: #38bdf8;
+            --cyan-glow: rgba(56, 189, 248, 0.4);
+            --emerald: #10b981;
+            --emerald-glow: rgba(16, 185, 129, 0.4);
+            --amber: #f59e0b;
+            --rose: #f43f5e;
+            --rose-glow: rgba(244, 63, 94, 0.5);
+            --purple: #a855f7;
+            --indigo: #6366f1;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body {
+            background-color: var(--bg-base);
+            background-image: 
+                radial-gradient(circle at 15% 15%, rgba(56, 189, 248, 0.06) 0%, transparent 40%),
+                radial-gradient(circle at 85% 20%, rgba(168, 85, 247, 0.06) 0%, transparent 40%),
+                radial-gradient(circle at 50% 80%, rgba(16, 185, 129, 0.04) 0%, transparent 50%);
+            color: var(--text-main);
+            min-height: 100vh;
+            padding: 24px;
+            overflow-x: hidden;
+        }
+
+        /* Glassmorphism utility */
+        .glass-panel {
+            background: var(--bg-card);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            box-shadow: 0 12px 32px 0 rgba(0, 0, 0, 0.37);
+            transition: border-color 0.25s ease, box-shadow 0.25s ease;
+        }
+
+        .glass-panel:hover {
+            border-color: rgba(255, 255, 255, 0.14);
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .brand-block h1 {
+            font-size: 1.65rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, #ffffff 30%, #94a3b8 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .badge-chip {
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 5px 12px;
+            border-radius: 9999px;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .badge-live {
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.35);
+            color: var(--emerald);
+            box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--emerald);
+            animation: pulse-ring 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes pulse-ring {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(1.2); }
+        }
+
+        .header-meta {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-align: right;
+        }
+
+        /* Interactive Simulation Action Bar */
+        .action-bar {
+            padding: 14px 20px;
+            margin-bottom: 24px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            border-left: 4px solid var(--cyan);
+        }
+
+        .action-title {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .btn-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .btn {
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: 8px 16px;
+            border-radius: 10px;
+            border: 1px solid var(--border-subtle);
+            background: rgba(30, 41, 59, 0.7);
+            color: var(--text-main);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            user-select: none;
+        }
+
+        .btn:hover {
+            transform: translateY(-1.5px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+            border-color: rgba(255, 255, 255, 0.25);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-blue:hover { background: rgba(56, 189, 248, 0.2); border-color: var(--cyan); color: var(--cyan); }
+        .btn-amber:hover { background: rgba(245, 158, 11, 0.2); border-color: var(--amber); color: var(--amber); }
+        .btn-purple:hover { background: rgba(168, 85, 247, 0.2); border-color: var(--purple); color: var(--purple); }
+        .btn-red:hover { background: rgba(244, 63, 94, 0.2); border-color: var(--rose); color: var(--rose); }
+        .btn-green:hover { background: rgba(16, 185, 129, 0.2); border-color: var(--emerald); color: var(--emerald); }
+
+        /* Stats Strip */
+        .stats-strip {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            padding: 18px 22px;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+        }
+
+        .stat-card.cyan::before { background: linear-gradient(90deg, var(--cyan), transparent); }
+        .stat-card.emerald::before { background: linear-gradient(90deg, var(--emerald), transparent); }
+        .stat-card.purple::before { background: linear-gradient(90deg, var(--purple), transparent); }
+        .stat-card.amber::before { background: linear-gradient(90deg, var(--amber), transparent); }
+        .stat-card.rose::before { background: linear-gradient(90deg, var(--rose), transparent); }
+
+        .stat-meta {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.85rem;
+            font-weight: 700;
+            color: #ffffff;
+            letter-spacing: -0.03em;
+        }
+
+        .stat-sub {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+        }
+
+        /* 2-Column Main Layout */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1.75fr 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 18px 24px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .panel-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .panel-body {
+            padding: 20px 24px;
+        }
+
+        /* Interactive Canvas */
+        #topoCanvas {
+            width: 100%;
+            height: 440px;
+            border-radius: 12px;
+            background: #090e17;
+            display: block;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .legend-bar {
+            display: flex;
+            gap: 16px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 14px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+        }
+
+        /* Right Column Panels */
+        .security-badge-box {
+            padding: 16px 20px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            border: 1px solid;
+            transition: all 0.3s ease;
+        }
+
+        .security-safe {
+            background: rgba(16, 185, 129, 0.1);
+            border-color: rgba(16, 185, 129, 0.3);
+            color: var(--emerald);
+        }
+
+        .security-attack {
+            background: rgba(244, 63, 94, 0.16);
+            border-color: rgba(244, 63, 94, 0.45);
+            color: var(--rose);
+            animation: alert-flash 1.2s infinite alternate;
+        }
+
+        @keyframes alert-flash {
+            0% { box-shadow: 0 0 10px rgba(244, 63, 94, 0.2); }
+            100% { box-shadow: 0 0 25px rgba(244, 63, 94, 0.6); }
+        }
+
+        .entropy-meter-container {
+            margin-bottom: 22px;
+        }
+
+        .meter-bar-bg {
+            width: 100%;
+            height: 10px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 6px;
+            overflow: hidden;
+            margin-top: 8px;
+            position: relative;
+        }
+
+        .meter-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--rose) 0%, var(--amber) 40%, var(--emerald) 100%);
+            border-radius: 6px;
+            transition: width 0.4s ease;
+        }
+
+        .agent-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .agent-row {
+            padding: 12px 16px;
+            background: rgba(30, 41, 59, 0.4);
+            border-radius: 10px;
+            border: 1px solid var(--border-subtle);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .agent-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .agent-pill {
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 3px 9px;
+            border-radius: 6px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .pill-blue { background: rgba(56, 189, 248, 0.15); color: var(--cyan); border: 1px solid rgba(56, 189, 248, 0.3); }
+        .pill-purple { background: rgba(168, 85, 247, 0.15); color: var(--purple); border: 1px solid rgba(168, 85, 247, 0.3); }
+        .pill-red { background: rgba(244, 63, 94, 0.15); color: var(--rose); border: 1px solid rgba(244, 63, 94, 0.3); }
+
+        /* Charts Row */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        .chart-box {
+            height: 240px;
+            position: relative;
+        }
+
+        /* Flow Table */
+        .table-responsive {
+            max-height: 280px;
+            overflow-y: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.82rem;
+            text-align: left;
+        }
+
+        thead th {
+            position: sticky;
+            top: 0;
+            background: #0d1322;
+            padding: 10px 14px;
+            font-weight: 600;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border-subtle);
+            text-transform: uppercase;
+            font-size: 0.72rem;
+            letter-spacing: 0.05em;
+        }
+
+        tbody td {
+            padding: 10px 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+        }
+
+        tbody tr:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        /* Toast Notifications */
+        #toastContainer {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toast {
+            background: #1e293b;
+            color: #fff;
+            padding: 12px 20px;
+            border-radius: 10px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            font-size: 0.85rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-left: 4px solid var(--cyan);
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* Modal Overlay & Card */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(4, 7, 13, 0.85);
+            backdrop-filter: blur(14px);
+            z-index: 10000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            padding: 24px;
+        }
+
+        .modal-content {
+            background: rgba(13, 19, 34, 0.96);
+            border: 1px solid var(--border-glass);
+            border-radius: 18px;
+            max-width: 1180px;
+            width: 100%;
+            max-height: 88vh;
+            overflow-y: auto;
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            animation: modalFadeIn 0.25s ease-out;
+        }
+
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: scale(0.96); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            background: rgba(13, 19, 34, 0.98);
+            z-index: 10;
+        }
+
+        .modal-body {
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .modal-close-btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--border-glass);
+            color: var(--text-muted);
+            border-radius: 8px;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 1.1rem;
+            transition: all 0.2s ease;
+        }
+
+        .modal-close-btn:hover {
+            background: var(--rose);
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="brand-block">
+            <h1>
+                ⚡ Autonomous SDN Traffic Engineering & DRL Platform
+                <span class="badge-chip badge-live">
+                    <span class="pulse-dot"></span> LIVE TELEMETRY
+                </span>
+            </h1>
+        </div>
+        <div class="header-meta">
+            <div>OpenFlow 1.3 Controller | Ryu Architecture</div>
+            <div style="color: var(--cyan); margin-top: 3px;">Double DQN • Dueling Double DQN • DDPG Continuous Control</div>
+        </div>
+    </header>
+
+    <!-- Interactive Simulation & Scenario Control Bar -->
+    <div class="glass-panel action-bar">
+        <div class="action-title">
+            <span>🎮 Scenario Driver & Blind Topologies</span>
+        </div>
+        <div class="btn-group" style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+            <select id="topoSelector" class="btn" style="background: rgba(15, 23, 42, 0.9); border: 1px solid var(--cyan); color: #38bdf8; font-weight: 600; cursor: pointer; padding: 7px 12px; outline: none; border-radius: 8px;" onchange="switchTopology(this.value)">
+                <option value="tree">🌳 Hierarchical Tree (Baseline - 7s)</option>
+                <option value="fattree">🏢 Fat-Tree Clos Fabric (k=4 - 20s)</option>
+                <option value="abilene">🇺🇸 Abilene Internet2 Backbone (12s)</option>
+                <option value="nsfnet">🌐 NSFNet Continental Mesh (14s)</option>
+                <option value="spineleaf">⚡ Spine-Leaf Cloud Fabric (12s)</option>
+                <option value="random">🎲 Dynamic Watts-Strogatz Mesh (20s)</option>
+            </select>
+            <button class="btn btn-purple" onclick="openBlindBenchmarkModal()">
+                📊 Blind Stress Benchmarks
+            </button>
+            <button class="btn btn-blue" onclick="triggerSim('traffic_burst')">
+                ⚡ Inject Pod Surge
+            </button>
+            <button class="btn btn-green" onclick="triggerSim('wcmp')">
+                ⚖️ Multi-Path (WCMP)
+            </button>
+            <button class="btn btn-amber" onclick="triggerSim('core_jamming')">
+                🔥 Jam Core Links (96%)
+            </button>
+            <button class="btn btn-red" onclick="triggerSim('link_failure')">
+                💥 Break Core Link
+            </button>
+            <button class="btn btn-blue" onclick="triggerSim('restore_links')">
+                🔄 Restore Links
+            </button>
+            <button class="btn btn-purple" onclick="triggerSim('multicast')">
+                📡 Stream Multicast
+            </button>
+            <button class="btn btn-red" onclick="triggerSim('ddos_attack')">
+                🚨 Launch DDoS Flood
+            </button>
+            <button class="btn btn-green" onclick="unblockAll()">
+                🛡️ Mitigate & Unblock
+            </button>
+            <button class="btn" onclick="triggerSim('reset')">
+                🔄 Reset Baseline
+            </button>
+            <button id="btnAutoSim" class="btn btn-blue" onclick="toggleAutoSim()">
+                ▶️ Start Auto Simulation
+            </button>
+        </div>
+    </div>
+
+    <!-- Real-Time Top Metrics Strip -->
+    <div class="stats-strip">
+        <div class="glass-panel stat-card cyan">
+            <div class="stat-meta">
+                <span>Total Throughput</span>
+                <span>Mbps</span>
+            </div>
+            <div class="stat-value" id="statThroughput">0.0</div>
+            <div class="stat-sub" id="statThroughputSub">Aggregate network rate</div>
+        </div>
+
+        <div class="glass-panel stat-card emerald">
+            <div class="stat-meta">
+                <span>Packet Arrival Rate</span>
+                <span>PPS</span>
+            </div>
+            <div class="stat-value" id="statPps">0</div>
+            <div class="stat-sub">Ingress packet frequency</div>
+        </div>
+
+        <div class="glass-panel stat-card purple">
+            <div class="stat-meta">
+                <span>Active OpenFlow Flows</span>
+                <span>Flows</span>
+            </div>
+            <div class="stat-value" id="statFlows">0</div>
+            <div class="stat-sub">Multi-hop installed entries</div>
+        </div>
+
+        <div class="glass-panel stat-card amber">
+            <div class="stat-meta">
+                <span>Shannon Entropy H(X)</span>
+                <span>[0.0 - 1.0]</span>
+            </div>
+            <div class="stat-value" id="statEntropy">1.000</div>
+            <div class="stat-sub" id="statEntropySub">Normal dispersion</div>
+        </div>
+
+        <div class="glass-panel stat-card rose">
+            <div class="stat-meta">
+                <span>Peak Link Load</span>
+                <span>Congestion</span>
+            </div>
+            <div class="stat-value" id="statMaxUtil">0.0%</div>
+            <div class="stat-sub" id="statReliefSub">Double DQN Load Balanced</div>
+        </div>
+    </div>
+
+    <!-- Main Dashboard Grid -->
+    <div class="dashboard-grid">
+        <!-- Left: Live Interactive Topology Canvas -->
+        <div class="glass-panel">
+            <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <div class="panel-title">
+                    🌐 Live SDN Fabric Topology & Dynamic Link Load
+                </div>
+                <div id="activeTopoLabel" style="font-size: 0.8rem; color: var(--cyan); font-weight: 600;">
+                    Hierarchical Tree (7 Switches, 8 Hosts, Lateral Cross-Links)
+                </div>
+            </div>
+            <div class="panel-body">
+                <canvas id="topoCanvas"></canvas>
+                <div class="legend-bar">
+                    <div class="legend-item"><div class="legend-color" style="background:#38bdf8;"></div> Core Switch (s1)</div>
+                    <div class="legend-item"><div class="legend-color" style="background:#a855f7;"></div> Aggregation Switches (s2, s3)</div>
+                    <div class="legend-item"><div class="legend-color" style="background:#10b981;"></div> Edge Access Switches (s4-s7)</div>
+                    <div class="legend-item"><div class="legend-color" style="background:#f43f5e;"></div> Congested / Attack Link (&gt;70%)</div>
+                    <div class="legend-item"><div class="legend-color" style="background:#f59e0b;"></div> Cross-Link Bypass</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Real-Time Security & Agent Telemetry -->
+        <div class="glass-panel">
+            <div class="panel-header">
+                <div class="panel-title">
+                    🛡️ Deep RL Intelligence & Threat Defense
+                </div>
+            </div>
+            <div class="panel-body">
+                <!-- Threat Status Box -->
+                <div id="securityAlertBox" class="security-badge-box security-safe">
+                    <span id="securityAlertText">🛡️ Traffic Status: Verified & Normal</span>
+                    <span id="securityAlertCode" class="badge-chip" style="background: rgba(255,255,255,0.1);">CODE GREEN</span>
+                </div>
+
+                <!-- Shannon Entropy Meter -->
+                <div class="entropy-meter-container">
+                    <div style="display:flex; justify-content:space-between; font-size: 0.78rem; font-weight: 600;">
+                        <span>Source IP Shannon Entropy</span>
+                        <span id="entropyTextVal">H(X) = 1.000</span>
+                    </div>
+                    <div class="meter-bar-bg">
+                        <div id="entropyBarFill" class="meter-bar-fill" style="width: 100%;"></div>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; font-size: 0.7rem; color: var(--text-dim); margin-top: 4px;">
+                        <span style="color: var(--rose);">Attack Target (&lt; 0.45)</span>
+                        <span>Balanced Traffic (1.00)</span>
+                    </div>
+                </div>
+
+                <!-- Multi-Agent Status Rows -->
+                <div class="agent-list">
+                    <div class="agent-row">
+                        <div class="agent-info">
+                            <span class="agent-pill pill-blue">Double DQN</span>
+                            <div>
+                                <div style="font-size:0.85rem; font-weight:600;">Unicast Routing</div>
+                                <div style="font-size:0.75rem; color:var(--text-dim);">Candidate Path Selection</div>
+                            </div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="font-family:'JetBrains Mono'; font-size:0.8rem;" id="agentRouterEps">ε = 0.010</div>
+                            <div style="font-size:0.7rem; color:var(--emerald);" id="agentRouterDev">DEVICE: CPU</div>
+                        </div>
+                    </div>
+
+                    <div class="agent-row">
+                        <div class="agent-info">
+                            <span class="agent-pill pill-purple">Dueling DQN</span>
+                            <div>
+                                <div style="font-size:0.85rem; font-weight:600;">Multicast Steiner</div>
+                                <div style="font-size:0.75rem; color:var(--text-dim);">OFPGT_ALL Group Tables</div>
+                            </div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="font-family:'JetBrains Mono'; font-size:0.8rem;" id="agentMulticastEps">ε = 0.010</div>
+                            <div style="font-size:0.7rem; color:var(--purple);" id="agentMulticastDev">DEVICE: CPU</div>
+                        </div>
+                    </div>
+
+                    <div class="agent-row">
+                        <div class="agent-info">
+                            <span class="agent-pill pill-red">DDPG Actor-Critic</span>
+                            <div>
+                                <div style="font-size:0.85rem; font-weight:600;">Continuous DDoS Defense</div>
+                                <div style="font-size:0.75rem; color:var(--text-dim);">Priority 100 DROP Flow</div>
+                            </div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="font-family:'JetBrains Mono'; font-size:0.8rem;" id="agentSecurityNoise">σ = 0.020</div>
+                            <div style="font-size:0.7rem; color:var(--rose);" id="agentSecurityDev">DEVICE: CPU</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Blocked IPs Section -->
+                <div>
+                    <div style="font-size: 0.78rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px;">
+                        Hardware Drop Rule Target IPs
+                    </div>
+                    <div id="blockedIpList" style="font-family:'JetBrains Mono'; font-size:0.85rem; color:var(--rose); background:rgba(244, 63, 94, 0.08); padding:8px 12px; border-radius:8px; border:1px solid rgba(244, 63, 94, 0.2);">
+                        None (Normal Operation)
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dynamic Charts Grid -->
+    <div class="charts-grid">
+        <div class="glass-panel">
+            <div class="panel-header">
+                <div class="panel-title">📈 Real-Time Throughput & Ingress Packet Rate</div>
+            </div>
+            <div class="panel-body">
+                <div class="chart-box">
+                    <canvas id="chartThroughput"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel">
+            <div class="panel-header">
+                <div class="panel-title">📉 Shannon Entropy Dispersion vs DDoS Alert Threshold</div>
+            </div>
+            <div class="panel-body">
+                <div class="chart-box">
+                    <canvas id="chartEntropy"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active OpenFlow Flows Table -->
+    <div class="glass-panel" style="margin-bottom: 24px;">
+        <div class="panel-header">
+            <div class="panel-title">📊 Active OpenFlow 1.3 Flow Table Telemetry</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);" id="activeFlowCountLabel">0 active flows</div>
+        </div>
+        <div class="panel-body" style="padding: 0;">
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Switch DPID</th>
+                            <th>Source IP</th>
+                            <th>Destination IP</th>
+                            <th>Packets</th>
+                            <th>Bytes</th>
+                            <th>Rate (Mbps)</th>
+                            <th>Rate (PPS)</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="flowTableBody">
+                        <tr>
+                            <td colspan="8" style="text-align: center; color: var(--text-dim); padding: 24px;">
+                                Awaiting active OpenFlow flow packets... Click "Inject Pod Surge" to test.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Converged Benchmark Results Strip -->
+    <div class="glass-panel">
+        <div class="panel-header">
+            <div class="panel-title">🏆 Converged 10,000-Episode Multi-Agent Benchmark Highlights</div>
+            <div style="font-size: 0.8rem; color: var(--emerald); font-weight:600;">10,000 Episodes Completed</div>
+        </div>
+        <div class="panel-body">
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
+                <div style="padding: 12px; background: rgba(255,255,255,0.03); border-radius: 8px;">
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">Congestion Reduction</div>
+                    <div style="font-size: 1.4rem; font-weight: 700; color: var(--emerald);">+18.56%</div>
+                    <div style="font-size: 0.72rem; color: var(--text-dim);">37.35% DQN vs 55.91% SPF</div>
+                </div>
+                <div style="padding: 12px; background: rgba(255,255,255,0.03); border-radius: 8px;">
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">Multicast BW Saved</div>
+                    <div style="font-size: 1.4rem; font-weight: 700; color: var(--purple);">60.19 Mbps</div>
+                    <div style="font-size: 0.72rem; color: var(--text-dim);">Group Table Steiner Copy</div>
+                </div>
+                <div style="padding: 12px; background: rgba(255,255,255,0.03); border-radius: 8px;">
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">DDoS Detection Accuracy</div>
+                    <div style="font-size: 1.4rem; font-weight: 700; color: var(--cyan);">100.0%</div>
+                    <div style="font-size: 0.72rem; color: var(--text-dim);">0.0% False Positive Rate</div>
+                </div>
+                <div style="padding: 12px; background: rgba(255,255,255,0.03); border-radius: 8px;">
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">Core Jamming Offload</div>
+                    <div style="font-size: 1.4rem; font-weight: 700; color: var(--amber);">100.0% Offload</div>
+                    <div style="font-size: 0.72rem; color: var(--text-dim);">+41.87% Peak Relief</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Blind Topologies Benchmark Modal -->
+    <div id="benchmarkModal" class="modal-overlay" onclick="if(event.target === this) closeBlindBenchmarkModal()">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="font-size: 1.4rem;">🌐</div>
+                    <div>
+                        <h2 style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 0;">Multi-Topology Blind Stress & Zero-Shot Generalization Suite</h2>
+                        <div style="font-size: 0.78rem; color: var(--text-muted);">Evaluation of trained Double DQN, Dueling DQN, and DDPG agents across unseen network architectures without retraining</div>
+                    </div>
+                </div>
+                <button class="modal-close-btn" onclick="closeBlindBenchmarkModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <!-- Top Summary Cards -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;">
+                    <div style="padding: 14px; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 12px;">
+                        <div style="font-size: 0.75rem; color: var(--cyan); font-weight: 600;">EVALUATED FABRICS</div>
+                        <div style="font-size: 1.4rem; font-weight: 700; color: #fff; margin-top: 4px;">5 Distinct Topologies</div>
+                        <div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 2px;">Tree, Fat-Tree, Abilene, NSFNet, Spine-Leaf</div>
+                    </div>
+                    <div style="padding: 14px; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 12px;">
+                        <div style="font-size: 0.75rem; color: var(--emerald); font-weight: 600;">DECISION THROUGHPUT</div>
+                        <div style="font-size: 1.4rem; font-weight: 700; color: #fff; margin-top: 4px;">&gt;3,200 Decisions/sec</div>
+                        <div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 2px;">500 Concurrent Avalanche flows</div>
+                    </div>
+                    <div style="padding: 14px; background: rgba(168, 85, 247, 0.08); border: 1px solid rgba(168, 85, 247, 0.2); border-radius: 12px;">
+                        <div style="font-size: 0.75rem; color: var(--purple); font-weight: 600;">AUTONOMOUS OFFLOAD RATE</div>
+                        <div style="font-size: 1.4rem; font-weight: 700; color: #fff; margin-top: 4px;">100.0% Reroute</div>
+                        <div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 2px;">Zero core traffic drops under jamming</div>
+                    </div>
+                    <div style="padding: 14px; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 12px;">
+                        <div style="font-size: 0.75rem; color: var(--amber); font-weight: 600;">ZERO-SHOT INDUCTIVE BIAS</div>
+                        <div style="font-size: 1.4rem; font-weight: 700; color: #fff; margin-top: 4px;">Normalized 10D Vector</div>
+                        <div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 2px;">Invariant to switch counts & diameters</div>
+                    </div>
+                </div>
+
+                <!-- Benchmark Results Matrix Table -->
+                <div class="glass-panel" style="background: rgba(15, 23, 42, 0.6); padding: 16px; border-radius: 12px;">
+                    <div style="font-size: 0.88rem; font-weight: 600; color: #fff; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                        <span>📊 Cross-Topology Stress Telemetry Matrix</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Topology</th>
+                                    <th>Nodes / Edges</th>
+                                    <th>Core Jamming DQN vs SPF</th>
+                                    <th>500-Flow Burst Jain's Fairness</th>
+                                    <th>Burst Throughput</th>
+                                    <th>Hotspot Diversion</th>
+                                    <th>Multicast BW Saved</th>
+                                </tr>
+                            </thead>
+                            <tbody id="benchmarkMatrixBody">
+                                <tr>
+                                    <td><b style="color: #38bdf8;">Hierarchical Tree</b></td>
+                                    <td>7 / 16</td>
+                                    <td>72.6% vs 21.1% (100% offload)</td>
+                                    <td><span class="badge-chip" style="background: rgba(16,185,129,0.2); color: #10b981;">1.0000 vs 0.7746 (+29%)</span></td>
+                                    <td>3,492 decisions/s</td>
+                                    <td>100% diverted</td>
+                                    <td>50.0 Mbps</td>
+                                </tr>
+                                <tr>
+                                    <td><b style="color: #38bdf8;">Fat-Tree Clos (k=4)</b></td>
+                                    <td>20 / 64</td>
+                                    <td>85.1% vs 85.1% (100% offload)</td>
+                                    <td><span class="badge-chip" style="background: rgba(16,185,129,0.2); color: #10b981;">0.4988 vs 0.4392 (+13%)</span></td>
+                                    <td>3,258 decisions/s</td>
+                                    <td>100% diverted (+2.09% relief)</td>
+                                    <td>18.2 Mbps</td>
+                                </tr>
+                                <tr>
+                                    <td><b style="color: #38bdf8;">Abilene US WAN</b></td>
+                                    <td>12 / 30</td>
+                                    <td>83.6% vs 30.9% (100% offload)</td>
+                                    <td><span class="badge-chip" style="background: rgba(16,185,129,0.2); color: #10b981;">0.9122 vs 0.6247 (+46%)</span></td>
+                                    <td>3,590 decisions/s</td>
+                                    <td>100% diverted (+3.03% relief)</td>
+                                    <td>40.8 Mbps</td>
+                                </tr>
+                                <tr>
+                                    <td><b style="color: #38bdf8;">NSFNet Continental</b></td>
+                                    <td>14 / 42</td>
+                                    <td>55.8% vs 45.5% (100% offload)</td>
+                                    <td><span class="badge-chip" style="background: rgba(16,185,129,0.2); color: #10b981;">0.8351 vs 0.7958 (+5%)</span></td>
+                                    <td>3,392 decisions/s</td>
+                                    <td>100% diverted</td>
+                                    <td>36.4 Mbps</td>
+                                </tr>
+                                <tr>
+                                    <td><b style="color: #38bdf8;">Spine-Leaf Fabric</b></td>
+                                    <td>12 / 64</td>
+                                    <td>91.6% vs 94.6% (+3.06% relief)</td>
+                                    <td><span class="badge-chip" style="background: rgba(56,189,248,0.2); color: #38bdf8;">0.3313 vs 0.3313 (Equal)</span></td>
+                                    <td>3,244 decisions/s</td>
+                                    <td>100% diverted</td>
+                                    <td>50.0 Mbps</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- High-Resolution Publication Visualizations -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 16px;">
+                    <div class="glass-panel" style="background: rgba(15, 23, 42, 0.6); padding: 14px; border-radius: 12px;">
+                        <div style="font-size: 0.82rem; font-weight: 600; color: #fff; margin-bottom: 10px;">📈 Multi-Topology Stress Benchmark Figure</div>
+                        <img src="/api/plots/blind_topologies_stress_benchmark.png" alt="Stress Benchmark" style="width: 100%; border-radius: 8px; border: 1px solid var(--border-subtle);" onerror="this.style.display='none'">
+                    </div>
+                    <div class="glass-panel" style="background: rgba(15, 23, 42, 0.6); padding: 14px; border-radius: 12px;">
+                        <div style="font-size: 0.82rem; font-weight: 600; color: #fff; margin-bottom: 10px;">🎯 Zero-Shot Generalization Radar Diagram</div>
+                        <img src="/api/plots/blind_topologies_radar.png" alt="Generalization Radar" style="width: 100%; border-radius: 8px; border: 1px solid var(--border-subtle);" onerror="this.style.display='none'">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Anchor -->
+    <div id="toastContainer"></div>
+
+    <script>
+        // =========================================================================
+        // Canvas Topology Rendering with Animated Packet Flow Pulses
+        // =========================================================================
+        const canvas = document.getElementById('topoCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = 440;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        const nodeLayout = {
+            1: { x: 0.50, y: 0.16, label: 's1 (Core)', type: 'core', color: '#38bdf8' },
+            2: { x: 0.30, y: 0.44, label: 's2 (Agg 1)', type: 'agg', color: '#a855f7' },
+            3: { x: 0.70, y: 0.44, label: 's3 (Agg 2)', type: 'agg', color: '#a855f7' },
+            4: { x: 0.16, y: 0.78, label: 's4 (Edge 1)', type: 'edge', color: '#10b981' },
+            5: { x: 0.38, y: 0.78, label: 's5 (Edge 2)', type: 'edge', color: '#10b981' },
+            6: { x: 0.62, y: 0.78, label: 's6 (Edge 3)', type: 'edge', color: '#10b981' },
+            7: { x: 0.84, y: 0.78, label: 's7 (Edge 4)', type: 'edge', color: '#10b981' }
+        };
+
+        let cachedNodes = [];
+        let cachedLinks = [];
+        let pulsePhase = 0;
+
+        function drawTopology() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            pulsePhase = (pulsePhase + 0.02) % 1.0;
+
+            const w = canvas.width;
+            const h = canvas.height;
+
+            // Dynamically synchronize nodeLayout from cachedNodes if available
+            if (cachedNodes && cachedNodes.length > 0) {
+                cachedNodes.forEach(n => {
+                    if (n.x !== undefined && n.y !== undefined) {
+                        let col = '#10b981';
+                        if (n.type === 'core' || n.type === 'spine') col = '#38bdf8';
+                        else if (n.type === 'agg') col = '#a855f7';
+                        else if (n.type === 'leaf') col = '#ec4899';
+                        nodeLayout[n.id] = {
+                            x: n.x,
+                            y: n.y,
+                            label: n.label || `s${n.id}`,
+                            type: n.type,
+                            color: col
+                        };
+                    }
+                });
+            }
+
+            // Draw Links first
+            cachedLinks.forEach(link => {
+                const u = link.source;
+                const v = link.target;
+                const p1 = nodeLayout[u] || { x: 0.5, y: 0.5 };
+                const p2 = nodeLayout[v] || { x: 0.5, y: 0.5 };
+
+                const x1 = p1.x * w;
+                const y1 = p1.y * h;
+                const x2 = p2.x * w;
+                const y2 = p2.y * h;
+
+                const isCrossLink = (u === 4 && v === 6) || (u === 6 && v === 4) ||
+                                    (u === 5 && v === 7) || (u === 7 && v === 5);
+
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+
+                let util = link.utilization || 0;
+                let stroke = '#10b981'; // Green default
+                if (util > 70) stroke = '#f43f5e'; // Red
+                else if (util > 35) stroke = '#f59e0b'; // Amber
+                else if (isCrossLink) stroke = '#a855f7'; // Purple cross link
+
+                ctx.strokeStyle = stroke;
+                ctx.lineWidth = isCrossLink ? 2.5 : (util > 50 ? 3.0 : 1.8);
+                if (isCrossLink) {
+                    ctx.setLineDash([6, 4]);
+                } else {
+                    ctx.setLineDash([]);
+                }
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Draw moving pulse if link is actively transmitting
+                if (util > 5.0) {
+                    const px = x1 + (x2 - x1) * pulsePhase;
+                    const py = y1 + (y2 - y1) * pulsePhase;
+                    ctx.beginPath();
+                    ctx.arc(px, py, 3.0, 0, 2 * Math.PI);
+                    ctx.fillStyle = stroke;
+                    ctx.shadowColor = stroke;
+                    ctx.shadowBlur = 8;
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                }
+
+                // Link utilization label
+                if (util > 0) {
+                    const mx = (x1 + x2) / 2;
+                    const my = (y1 + y2) / 2;
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.font = '9px "JetBrains Mono"';
+                    ctx.fillText(`${util}%`, mx + 3, my - 3);
+                }
+            });
+
+            // Draw Switches
+            const nodeRadius = Object.keys(nodeLayout).length > 15 ? 11 : 14;
+            Object.keys(nodeLayout).forEach(id => {
+                const node = nodeLayout[id];
+                const x = node.x * w;
+                const y = node.y * h;
+
+                // Outer aura ring
+                ctx.beginPath();
+                ctx.arc(x, y, nodeRadius + 6, 0, 2 * Math.PI);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+                ctx.fill();
+
+                // Main Node circle
+                ctx.beginPath();
+                ctx.arc(x, y, nodeRadius, 0, 2 * Math.PI);
+                ctx.fillStyle = node.color || '#10b981';
+                ctx.shadowColor = node.color || '#10b981';
+                ctx.shadowBlur = 10;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+
+                // Inner core
+                ctx.beginPath();
+                ctx.arc(x, y, Math.max(3, nodeRadius - 8), 0, 2 * Math.PI);
+                ctx.fillStyle = '#080c14';
+                ctx.fill();
+
+                // Label
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 10px Inter';
+                ctx.textAlign = 'center';
+                ctx.fillText(node.label || `s${id}`, x, y + nodeRadius + 14);
+            });
+
+            requestAnimationFrame(drawTopology);
+        }
+        requestAnimationFrame(drawTopology);
+
+        // =========================================================================
+        // Chart.js Telemetry Charts Setup
+        // =========================================================================
+        const chartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 400 },
+            plugins: {
+                legend: {
+                    labels: { color: '#94a3b8', font: { family: 'Inter', size: 11 } }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }
+                },
+                y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }
+                }
+            }
+        };
+
+        const ctxThroughput = document.getElementById('chartThroughput').getContext('2d');
+        const chartThroughput = new Chart(ctxThroughput, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Throughput (Mbps)',
+                        data: [],
+                        borderColor: '#38bdf8',
+                        backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                        fill: true,
+                        tension: 0.35,
+                        borderWidth: 2
+                    },
+                    {
+                        label: 'Packet Rate (PPS)',
+                        data: [],
+                        borderColor: '#10b981',
+                        backgroundColor: 'transparent',
+                        tension: 0.35,
+                        borderWidth: 2,
+                        yAxisID: 'y1'
+                    }
+                ]
+            },
+            options: {
+                ...chartOptions,
+                scales: {
+                    ...chartOptions.scales,
+                    y1: {
+                        position: 'right',
+                        grid: { drawOnChartArea: false },
+                        ticks: { color: '#10b981', font: { family: 'JetBrains Mono', size: 10 } }
+                    }
+                }
+            }
+        });
+
+        const ctxEntropy = document.getElementById('chartEntropy').getContext('2d');
+        const chartEntropy = new Chart(ctxEntropy, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Shannon Entropy H(X)',
+                        data: [],
+                        borderColor: '#a855f7',
+                        backgroundColor: 'rgba(168, 85, 247, 0.12)',
+                        fill: true,
+                        tension: 0.3,
+                        borderWidth: 2
+                    },
+                    {
+                        label: 'DDoS Threshold (0.45)',
+                        data: [],
+                        borderColor: '#f43f5e',
+                        borderDash: [5, 5],
+                        pointRadius: 0,
+                        borderWidth: 1.5
+                    }
+                ]
+            },
+            options: {
+                ...chartOptions,
+                scales: {
+                    ...chartOptions.scales,
+                    y: {
+                        min: 0.0,
+                        max: 1.05,
+                        ticks: { color: '#64748b' }
+                    }
+                }
+            }
+        });
+
+        // =========================================================================
+        // REST Telemetry Polling Loop
+        // =========================================================================
+        async function fetchDashboardData() {
+            try {
+                const [topoRes, statsRes, secRes, rlRes, histRes] = await Promise.all([
+                    fetch('/api/topology').then(r => r.json()),
+                    fetch('/api/stats').then(r => r.json()),
+                    fetch('/api/security').then(r => r.json()),
+                    fetch('/api/rl_metrics').then(r => r.json()),
+                    fetch('/api/history').then(r => r.json())
+                ]);
+
+                // Update cached topology
+                cachedNodes = topoRes.nodes || [];
+                cachedLinks = topoRes.links || [];
+
+                // Update active topology badge and dropdown
+                if (topoRes.meta && topoRes.meta.name) {
+                    const activeTopoEl = document.getElementById('activeTopoLabel');
+                    if (activeTopoEl) {
+                        activeTopoEl.innerText = `${topoRes.meta.name} (${topoRes.meta.switches} Switches, ${cachedLinks.length} Links)`;
+                    }
+                    const topoSel = document.getElementById('topoSelector');
+                    if (topoSel && topoRes.meta.id && topoSel.value !== topoRes.meta.id) {
+                        topoSel.value = topoRes.meta.id;
+                    }
+                }
+
+                // Top Strip
+                document.getElementById('statThroughput').innerText = `${statsRes.total_throughput_mbps}`;
+                document.getElementById('statPps').innerText = `${statsRes.total_packet_rate_pps}`;
+                document.getElementById('statFlows').innerText = `${statsRes.active_flows_count}`;
+                document.getElementById('statEntropy').innerText = secRes.shannon_entropy.toFixed(3);
+
+                // Max utilization
+                let maxUtil = 0;
+                cachedLinks.forEach(l => { if (l.utilization > maxUtil) maxUtil = l.utilization; });
+                document.getElementById('statMaxUtil').innerText = `${maxUtil}%`;
+
+                // Security Alert
+                const alertBox = document.getElementById('securityAlertBox');
+                const alertText = document.getElementById('securityAlertText');
+                const alertCode = document.getElementById('securityAlertCode');
+                const barFill = document.getElementById('entropyBarFill');
+                const entropyVal = secRes.shannon_entropy;
+
+                barFill.style.width = `${Math.max(5, Math.min(100, entropyVal * 100))}%`;
+                document.getElementById('entropyTextVal').innerText = `H(X) = ${entropyVal.toFixed(3)}`;
+
+                if (secRes.ddos_alert) {
+                    alertBox.className = 'security-badge-box security-attack';
+                    alertText.innerHTML = `🚨 <b>DDoS Attack Active / Mitigated!</b> PPS: ${secRes.packet_rate_pps}`;
+                    alertCode.innerText = 'CODE RED (DROP RULE)';
+                    alertCode.style.background = 'rgba(244, 63, 94, 0.3)';
+                    document.getElementById('statEntropySub').innerText = 'Entropy collapsed (Volumetric Flood)';
+                    document.getElementById('statEntropySub').style.color = 'var(--rose)';
+                } else {
+                    alertBox.className = 'security-badge-box security-safe';
+                    alertText.innerHTML = `🛡️ Traffic Status: Normal & Verified`;
+                    alertCode.innerText = 'CODE GREEN';
+                    alertCode.style.background = 'rgba(16, 185, 129, 0.2)';
+                    document.getElementById('statEntropySub').innerText = 'Normal dispersion';
+                    document.getElementById('statEntropySub').style.color = 'var(--text-dim)';
+                }
+
+                // Blocked IPs
+                const blk = document.getElementById('blockedIpList');
+                if (secRes.blocked_ips && secRes.blocked_ips.length > 0) {
+                    blk.innerHTML = `⚠️ <b>Blocked:</b> ${secRes.blocked_ips.join(', ')} (Hardware Priority 100 FlowMod)`;
+                } else {
+                    blk.innerHTML = `None (Normal Operation)`;
+                }
+
+                // Agents
+                document.getElementById('agentRouterEps').innerText = `ε = ${rlRes.router_epsilon.toFixed(3)}`;
+                document.getElementById('agentRouterDev').innerText = `DEVICE: ${rlRes.router_device.toUpperCase()}`;
+                document.getElementById('agentMulticastEps').innerText = `ε = ${rlRes.multicast_epsilon.toFixed(3)}`;
+                document.getElementById('agentMulticastDev').innerText = `DEVICE: ${rlRes.multicast_device.toUpperCase()}`;
+                document.getElementById('agentSecurityNoise').innerText = `σ = ${rlRes.security_noise.toFixed(3)}`;
+                document.getElementById('agentSecurityDev').innerText = `DEVICE: ${rlRes.security_device.toUpperCase()}`;
+
+                // Flows Table
+                const tbody = document.getElementById('flowTableBody');
+                document.getElementById('activeFlowCountLabel').innerText = `${statsRes.flows.length} active flows`;
+                if (statsRes.flows && statsRes.flows.length > 0) {
+                    tbody.innerHTML = statsRes.flows.map(f => {
+                        const isAttacker = f.src === '10.0.0.4';
+                        const statusBadge = isAttacker 
+                            ? `<span style="color:var(--rose); font-weight:700;">BLOCKED / DROPPED</span>`
+                            : `<span style="color:var(--emerald);">FORWARDED</span>`;
+                        return `
+                            <tr>
+                                <td>Switch s${f.switch}</td>
+                                <td>${f.src}</td>
+                                <td>${f.dst}</td>
+                                <td>${f.packets}</td>
+                                <td>${(f.bytes / 1024).toFixed(1)} KB</td>
+                                <td style="color:var(--cyan); font-weight:600;">${f.mbps}</td>
+                                <td>${f.pps}</td>
+                                <td>${statusBadge}</td>
+                            </tr>
+                        `;
+                    }).join('');
+                } else {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="8" style="text-align: center; color: var(--text-dim); padding: 24px;">
+                                Awaiting active traffic flows... Click "Inject Pod Surge" above to test.
+                            </td>
+                        </tr>
+                    `;
+                }
+
+                // Update Dynamic Charts from History
+                if (histRes && histRes.length > 0) {
+                    const labels = histRes.map(h => h.timestamp);
+                    const mbps = histRes.map(h => h.throughput_mbps);
+                    const pps = histRes.map(h => h.packet_rate_pps);
+                    const ent = histRes.map(h => h.entropy);
+                    const thresholds = histRes.map(() => 0.45);
+
+                    chartThroughput.data.labels = labels;
+                    chartThroughput.data.datasets[0].data = mbps;
+                    chartThroughput.data.datasets[1].data = pps;
+                    chartThroughput.update('none');
+
+                    chartEntropy.data.labels = labels;
+                    chartEntropy.data.datasets[0].data = ent;
+                    chartEntropy.data.datasets[1].data = thresholds;
+                    chartEntropy.update('none');
+                }
+
+            } catch (e) {
+                // Ignore transient network errors
+            }
+        }
+
+        setInterval(fetchDashboardData, 1500);
+        fetchDashboardData();
+
+        // =========================================================================
+        // Simulation Trigger Buttons & Toast Notifications
+        // =========================================================================
+        function showToast(msg, isAlert = false) {
+            const container = document.getElementById('toastContainer');
+            const t = document.createElement('div');
+            t.className = 'toast';
+            if (isAlert) t.style.borderLeftColor = 'var(--rose)';
+            t.innerHTML = `<span>${msg}</span>`;
+            container.appendChild(t);
+            setTimeout(() => { t.remove(); }, 3500);
+        }
+
+        async function triggerSim(action) {
+            try {
+                const res = await fetch(`/api/simulate/${action}`, { method: 'POST' }).then(r => r.json());
+                showToast(res.message, action === 'ddos_attack');
+                fetchDashboardData();
+            } catch (err) {
+                showToast(`Simulation error: ${err}`, true);
+            }
+        }
+
+        async function unblockAll() {
+            try {
+                const res = await fetch('/api/unblock_all').then(r => r.json());
+                showToast("🛡️ Security Module: Cleared all blocked IPs and DROP flow rules.");
+                fetchDashboardData();
+            } catch (err) {
+                showToast(`Error: ${err}`, true);
+            }
+        }
+
+        let autoSimInterval = null;
+        function toggleAutoSim() {
+            const btn = document.getElementById('btnAutoSim');
+            if (autoSimInterval) {
+                clearInterval(autoSimInterval);
+                autoSimInterval = null;
+                btn.innerHTML = '▶️ Start Auto Simulation';
+                btn.className = 'btn btn-blue';
+                showToast("Stopped autonomous simulation driver.");
+            } else {
+                let step = 0;
+                autoSimInterval = setInterval(() => {
+                    step = (step + 1) % 4;
+                    if (step === 0) triggerSim('traffic_burst');
+                    else if (step === 1) triggerSim('core_jamming');
+                    else if (step === 2) triggerSim('multicast');
+                    else if (step === 3) triggerSim('ddos_attack');
+                }, 6000);
+                btn.innerHTML = '⏹️ Stop Auto Simulation';
+                btn.className = 'btn btn-red';
+                showToast("Autonomous SDN traffic driver activated (cycling regimes every 6s).");
+            }
+        }
+
+        // =========================================================================
+        // Blind Topology Switching & Benchmark Modal Logic
+        // =========================================================================
+        async function switchTopology(topoId) {
+            showToast(`🔄 Switching fabric to ${topoId.toUpperCase()}...`);
+            try {
+                const res = await fetch(`/api/simulate/switch_topology?topo=${topoId}`, { method: 'POST' }).then(r => r.json());
+                showToast(`✅ ${res.message}`);
+                // Clear old nodeLayout so new positions map instantly
+                for (let k in nodeLayout) delete nodeLayout[k];
+                await fetchDashboardData();
+            } catch (err) {
+                showToast(`❌ Switch error: ${err.message}`, true);
+            }
+        }
+
+        async function openBlindBenchmarkModal() {
+            const modal = document.getElementById('benchmarkModal');
+            if (modal) {
+                modal.style.display = 'flex';
+                try {
+                    const bData = await fetch('/api/benchmarks').then(r => r.json());
+                    if (bData.blind_topologies_stress) {
+                        renderBenchmarkTable(bData.blind_topologies_stress);
+                    }
+                } catch (e) {
+                    console.error("Benchmark fetch error:", e);
+                }
+            }
+        }
+
+        function closeBlindBenchmarkModal() {
+            const modal = document.getElementById('benchmarkModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function renderBenchmarkTable(data) {
+            const tbody = document.getElementById('benchmarkMatrixBody');
+            if (!tbody || !data) return;
+            let rows = '';
+            for (let tid in data) {
+                const item = data[tid];
+                const s1 = item.scenario_1_core_jamming || {};
+                const s2 = item.scenario_2_concurrency_burst || {};
+                const s3 = item.scenario_3_hotspot_surge || {};
+                const s5 = item.scenario_5_multicast || {};
+
+                const jDqn = s2.jains_fairness_dqn || 0;
+                const jSpf = s2.jains_fairness_spf || 0;
+                const jGain = jSpf > 0 ? Math.round(((jDqn - jSpf) / jSpf) * 100) : 0;
+                const jGainBadge = jGain >= 0 ? `+${jGain}%` : `${jGain}%`;
+
+                rows += `
+                    <tr>
+                        <td><b style="color: #38bdf8;">${item.name}</b></td>
+                        <td>${item.switches} / ${item.edges}</td>
+                        <td>${s1.double_dqn_bottleneck_pct}% vs ${s1.dijkstra_spf_bottleneck_pct}% (${s1.autonomous_offload_rate_pct}% offload)</td>
+                        <td><span class="badge-chip" style="background: rgba(16,185,129,0.2); color: #10b981;">${jDqn.toFixed(4)} vs ${jSpf.toFixed(4)} (${jGainBadge})</span></td>
+                        <td>${s2.decisions_per_sec} dec/s</td>
+                        <td>${s3.diversion_rate_pct}% diverted</td>
+                        <td>${s5.average_bw_saved_mbps} Mbps</td>
+                    </tr>
+                `;
+            }
+            tbody.innerHTML = rows;
+        }
+    </script>
+</body>
+</html>

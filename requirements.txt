@@ -1,0 +1,8 @@
+torch>=2.0.0
+numpy>=1.22.0
+networkx>=2.8.0
+ryu>=4.34
+eventlet>=0.30.2
+matplotlib>=3.5.0
+pandas>=1.4.0
+scipy>=1.8.0

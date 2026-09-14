@@ -221,7 +221,7 @@ def run_stress_tests():
     # =========================================================================
     print("\n" + "=" * 80)
     print(" Generating Stress Test Publication Plot: logs/plots/stress_test_load_balancing.png ...")
-    
+
     plots_dir = os.path.join(BASE_DIR, 'logs', 'plots')
     os.makedirs(plots_dir, exist_ok=True)
 

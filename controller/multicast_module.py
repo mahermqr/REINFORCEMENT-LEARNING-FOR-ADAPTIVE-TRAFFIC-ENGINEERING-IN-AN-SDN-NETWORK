@@ -1,7 +1,6 @@
 import sys
 import os
 import networkx as nx
-import numpy as np
 
 # Add agent and controller to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'agent'))
@@ -19,19 +18,19 @@ class MulticastModule:
         self.controller = controller
         self.state_manager = state_manager
         self.logger = controller.logger
-        
+
         # Initialize Dueling Double DQN Agent (50 state features, 10 action weight configurations)
         self.agent = DQNMulticastAgent(state_size=50, action_size=10, lr=0.001)
         self.group_id_counter = 100
         self.installed_trees = {} # group_ip -> tree_graph
         self.prev_experience = {}
-        
+
         # Auto-load trained checkpoint if available
         ckpt_path = os.path.join(os.path.dirname(__file__), '..', 'models', 'dqn_multicast.pth')
         if os.path.exists(ckpt_path):
             self.agent.load(ckpt_path)
             self.logger.info("[MulticastModule] Loaded pre-trained Dueling DQN checkpoint from %s", ckpt_path)
-        
+
         self.logger.info("[MulticastModule] Initialized with Dueling Double DQN on device: %s", self.agent.device)
 
     def handle_multicast(self, ev, pkt):
@@ -49,7 +48,7 @@ class MulticastModule:
         # Determine receiver switches from StateManager or default topology edge switches
         receivers = self.state_manager.get_multicast_receivers(group_ip)
         receiver_dpids = list({r[0] for r in receivers if r[0] is not None})
-        
+
         # If no explicit IGMP joins yet, automatically default to leaf switches in topology
         if not receiver_dpids:
             all_nodes = list(self.state_manager.graph.nodes())
@@ -87,7 +86,7 @@ class MulticastModule:
             loss = self.agent.train(batch_size=32)
             if loss is not None:
                 self.logger.debug("[MulticastModule] Dueling DQN Loss: %.4f | Epsilon: %.3f", loss, self.agent.epsilon)
-                
+
         self.prev_experience[group_ip] = (state, action)
 
         self.logger.info("[MulticastModule] Group %s Tree built: %d nodes, %d edges | Action: %d | Reward: %.2f",
@@ -102,7 +101,7 @@ class MulticastModule:
     def _build_weighted_graph(self, action):
         """Applies RL action to weight links by delay, utilization, or loss."""
         g = self.state_manager.graph.copy()
-        
+
         # Action modulates the weight vector:
         # Action 0-3: Delay priority
         # Action 4-6: Bandwidth utilization priority
@@ -114,7 +113,7 @@ class MulticastModule:
             delay = self.state_manager.link_delays.get((u, v), 2.0)
             util = self.state_manager.link_utilization.get((u, v), 0.0)
             loss = self.state_manager.link_loss.get((u, v), 0.0)
-            
+
             # Composite edge weight
             weight = alpha * delay + beta * (util * 20.0) + (loss * 100.0) + 1.0
             g[u][v]['weight'] = weight
@@ -141,7 +140,7 @@ class MulticastModule:
         tree_edges = tree.number_of_edges()
         unicast_approx_edges = num_receivers * 3 # Estimated separate unicast paths
         savings = max(0, unicast_approx_edges - tree_edges)
-        
+
         reward = float(savings * 2.0 - tree_edges * 0.8)
         return reward
 

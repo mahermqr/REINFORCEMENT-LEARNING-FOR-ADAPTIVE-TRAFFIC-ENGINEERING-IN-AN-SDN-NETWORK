@@ -5,7 +5,7 @@ from ryu.controller.handler import set_ev_cls
 from ryu.ofproto import ofproto_v1_3
 from ryu.lib.packet import packet, ethernet, ipv4, arp, ether_types
 from ryu.lib import hub
-from ryu.topology import event, switches
+from ryu.topology import event
 from ryu.topology.api import get_switch, get_link
 
 import sys
@@ -204,7 +204,7 @@ class MainController(app_manager.RyuApp):
 
         # Check if destination host is already known
         dst_dpid, dst_port = self.state_manager.get_host_location(ip=dst_ip)
-        
+
         parser = datapath.ofproto_parser
         ofproto = datapath.ofproto
 

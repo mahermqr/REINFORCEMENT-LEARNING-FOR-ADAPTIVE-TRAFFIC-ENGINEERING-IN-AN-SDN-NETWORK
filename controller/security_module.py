@@ -1,12 +1,11 @@
 import sys
 import os
-import numpy as np
 
 # Add agent and controller to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'agent'))
 sys.path.append(os.path.dirname(__file__))
 from ddpg_security import DDPGSecurityAgent
-from ryu.lib.packet import ethernet, ipv4, ether_types
+from ryu.lib.packet import ipv4, ether_types
 
 class SecurityModule:
     """
@@ -18,21 +17,21 @@ class SecurityModule:
         self.controller = controller
         self.state_manager = state_manager
         self.logger = controller.logger
-        
+
         # Initialize DDPG Continuous Control Agent (5 state features, 1 continuous action)
         self.agent = DDPGSecurityAgent(state_size=5, action_size=1, actor_lr=0.001, critic_lr=0.002)
-        
+
         self.prev_state = None
         self.prev_action = None
         self.blocked_ips = set()
         self.metered_ips = {}
-        
+
         # Auto-load trained checkpoint if available
         ckpt_path = os.path.join(os.path.dirname(__file__), '..', 'models', 'ddpg_security.pth')
         if os.path.exists(ckpt_path):
             self.agent.load(ckpt_path)
             self.logger.info("[SecurityModule] Loaded pre-trained DDPG Security checkpoint from %s", ckpt_path)
-        
+
         self.logger.info("[SecurityModule] Initialized with DDPG Continuous Agent on device: %s", self.agent.device)
 
     def analyze_packet(self, pkt, datapath):
@@ -58,7 +57,7 @@ class SecurityModule:
         pps_feat = state[0]
         # Robust attack condition: significant packet volume and compressed entropy
         actual_attack_condition = (entropy_feat < 0.45 and pps_feat > 0.4) or (pps_feat > 0.75)
-        
+
         # Action indicates mitigation when above decision threshold
         is_attack = (action >= 0.2) and actual_attack_condition
 
@@ -89,7 +88,7 @@ class SecurityModule:
                 if stat.get('pps', 0) > max_pkts and stat.get('pps', 0) > 2000:
                     max_pkts = stat.get('pps', 0)
                     offender_ip = src_ip
-            
+
             if not offender_ip and self.state_manager.src_ip_counter and entropy_feat < 0.35:
                 offender_ip = max(self.state_manager.src_ip_counter, key=self.state_manager.src_ip_counter.get)
 

@@ -1,13 +1,12 @@
 import sys
 import os
-import networkx as nx
 import numpy as np
 
 # Add agent and controller to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'agent'))
 sys.path.append(os.path.dirname(__file__))
 from dqn_router import DQNRoutingAgent
-from ryu.lib.packet import ethernet, ipv4, arp, ether_types
+from ryu.lib.packet import ethernet, ipv4, ether_types
 
 class RoutingModule:
     """
@@ -19,17 +18,17 @@ class RoutingModule:
         self.controller = controller
         self.state_manager = state_manager
         self.logger = controller.logger
-        
+
         # Initialize Double DQN Agent (10 state features, 4 candidate path actions)
         self.agent = DQNRoutingAgent(state_size=10, action_size=4, lr=0.001)
         self.prev_experience = {} # (src_dpid, dst_dpid) -> (state, action)
-        
+
         # Auto-load trained checkpoint if available
         ckpt_path = os.path.join(os.path.dirname(__file__), '..', 'models', 'dqn_router.pth')
         if os.path.exists(ckpt_path):
             self.agent.load(ckpt_path)
             self.logger.info("[RoutingModule] Loaded pre-trained Double DQN checkpoint from %s", ckpt_path)
-        
+
         self.logger.info("[RoutingModule] Initialized with Double DQN Agent on device: %s", self.agent.device)
 
     def handle_unicast(self, ev, pkt):
@@ -81,7 +80,7 @@ class RoutingModule:
 
         # Action selects from candidate paths (modulo candidate count)
         selected_path = candidate_paths[action % len(candidate_paths)]
-        
+
         # Calculate real reward based on path hops, latency, and bottleneck utilization
         reward = self._calculate_reward(selected_path)
 
@@ -93,7 +92,7 @@ class RoutingModule:
             loss = self.agent.train(batch_size=32)
             if loss is not None:
                 self.logger.debug("[RoutingModule] DQN Training Loss: %.4f | Epsilon: %.3f", loss, self.agent.epsilon)
-                
+
         self.prev_experience[exp_key] = (state, action)
 
         self.logger.info("[RoutingModule] Routing %s -> %s via path: %s | Action: %d | Reward: %.2f",
@@ -106,7 +105,7 @@ class RoutingModule:
         first_hop = selected_path[1]
         edge_data = self.state_manager.graph.get_edge_data(dpid, first_hop)
         out_port = edge_data['port'] if edge_data and 'port' in edge_data else ofproto.OFPP_FLOOD
-        
+
         actions = [parser.OFPActionOutput(out_port)]
         self._send_packet_out(datapath, msg, actions)
 
@@ -142,9 +141,9 @@ class RoutingModule:
             dp = self.controller.datapaths.get(cur_dpid)
             if not dp:
                 continue
-                
+
             parser = dp.ofproto_parser
-            
+
             # Determine egress port for this hop
             if i < len(path) - 1:
                 next_dpid = path[i+1]
@@ -160,7 +159,7 @@ class RoutingModule:
                 match = parser.OFPMatch(eth_type=ether_types.ETH_TYPE_IP, ipv4_dst=ip_dst)
             else:
                 match = parser.OFPMatch(eth_dst=eth_dst)
-                
+
             self.controller.add_flow(dp, priority=10, match=match, actions=actions, idle_timeout=60, hard_timeout=120)
 
     def calculate_wcmp_weights(self, candidate_paths, beta=4.0):

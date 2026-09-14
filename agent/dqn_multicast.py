@@ -18,7 +18,7 @@ class DuelingDQN(nn.Module):
     """
     def __init__(self, state_size, action_size):
         super(DuelingDQN, self).__init__()
-        
+
         # Shared feature representation layers
         self.feature = nn.Sequential(
             nn.Linear(state_size, 128),
@@ -28,14 +28,14 @@ class DuelingDQN(nn.Module):
             nn.LayerNorm(128),
             nn.ReLU()
         )
-        
+
         # Advantage stream: A(s, a)
         self.advantage = nn.Sequential(
             nn.Linear(128, 64),
             nn.ReLU(),
             nn.Linear(64, action_size)
         )
-        
+
         # Value stream: V(s)
         self.value = nn.Sequential(
             nn.Linear(128, 64),
@@ -67,24 +67,24 @@ class DQNMulticastAgent:
         self.epsilon_decay = epsilon_decay
         self.learning_rate = lr
         self.use_per = use_per
-        
+
         if self.use_per:
             self.memory = PrioritizedReplayBuffer(capacity=memory_size)
         else:
             self.memory = deque(maxlen=memory_size)
-        
+
         # Automatic device selection
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
+
         # Initialize Dueling DQN policy and target networks
         self.model = DuelingDQN(state_size, action_size).to(self.device)
         self.target_model = DuelingDQN(state_size, action_size).to(self.device)
         self.target_model.load_state_dict(self.model.state_dict())
         self.target_model.eval()
-        
+
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
         self.criterion = nn.SmoothL1Loss(reduction='none' if use_per else 'mean')
-        
+
         self.update_target_counter = 0
         self.target_update_freq = 10
         self.loss_history = []
@@ -93,7 +93,7 @@ class DQNMulticastAgent:
         """Epsilon-greedy action selection."""
         if explore and random.uniform(0, 1) <= self.epsilon:
             return random.randrange(self.action_size)
-        
+
         state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
         self.model.eval()
         with torch.no_grad():

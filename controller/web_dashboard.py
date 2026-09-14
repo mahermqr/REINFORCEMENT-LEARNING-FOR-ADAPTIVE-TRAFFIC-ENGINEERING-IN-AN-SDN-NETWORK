@@ -1,7 +1,6 @@
 import json
 import os
 import sys
-import time
 from ryu.lib import hub
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
@@ -36,7 +35,7 @@ class DashboardServer:
         self.logger = controller.logger
         self.static_dir = os.path.join(os.path.dirname(__file__), 'static')
         os.makedirs(self.static_dir, exist_ok=True)
-        
+
         # Start server in Ryu green thread
         self.thread = hub.spawn(self._run_server)
 
@@ -53,7 +52,7 @@ class DashboardServer:
                 parsed = urlparse(self.path)
                 p = parsed.path
                 query = parse_qs(parsed.query)
-                
+
                 if p == '/api/topology':
                     topo_id = query.get('topo', [None])[0]
                     self._send_json(self._get_topology_data(topo_id))
@@ -154,7 +153,7 @@ class DashboardServer:
                 state_manager.record_host("10.0.0.2", "00:00:00:00:00:02", 4, 2)
                 state_manager.record_host("10.0.0.5", "00:00:00:00:00:05", 6, 1)
                 state_manager.record_host("10.0.0.6", "00:00:00:00:00:06", 6, 2)
-                
+
                 # Flow 1: h2 -> h5 (Pod 1 to Pod 2) - Double DQN chooses lateral cross-link s4-s6 or core
                 state = state_manager.get_routing_state(4, 6)
                 act = controller.routing_module.agent.act(state, explore=False)
@@ -308,7 +307,7 @@ class DashboardServer:
             def _get_stats_data(self):
                 total_mbps = sum(p.get('tx_mbps', 0.0) for p in state_manager.port_rates.values())
                 total_pps = sum(p.get('tx_pps', 0.0) for p in state_manager.port_rates.values())
-                
+
                 flows = []
                 for (dpid, src_ip, dst_ip), stat in list(state_manager.flow_stats.items())[:15]:
                     flows.append({

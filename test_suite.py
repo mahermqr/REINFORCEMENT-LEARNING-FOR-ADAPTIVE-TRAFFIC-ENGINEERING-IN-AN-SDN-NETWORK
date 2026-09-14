@@ -18,7 +18,6 @@ Tests:
 import sys
 import os
 import time
-import math
 import tempfile
 import unittest
 import numpy as np
@@ -34,11 +33,11 @@ sys.path.append(os.path.join(BASE_DIR, 'topology'))
 
 from dqn_router import DQNRoutingAgent
 from dqn_multicast import DQNMulticastAgent, DuelingDQN
-from ddpg_security import DDPGSecurityAgent, Actor, Critic
+from ddpg_security import DDPGSecurityAgent
 from prioritized_replay import PrioritizedReplayBuffer, SumTree
 from state_manager import StateManager
 from benchmark_evaluation import build_evaluation_topology
-from topology_library import ALL_TOPOLOGY_BUILDERS, get_topology, list_available_topologies
+from topology_library import get_topology, list_available_topologies
 from traditional_routing import (
     dijkstra_spf, ecmp_routing, widest_shortest_path, least_loaded_routing, random_routing, compute_path_metrics
 )
@@ -50,7 +49,7 @@ class TestRLAgents(unittest.TestCase):
     def test_dqn_router_lifecycle(self):
         agent = DQNRoutingAgent(state_size=10, action_size=4, lr=0.001)
         dummy_state = np.random.rand(10).astype(np.float32)
-        
+
         # Test greedy vs exploration inference
         greedy_action = agent.act(dummy_state, explore=False)
         self.assertIn(greedy_action, range(4))
@@ -171,7 +170,7 @@ class TestRLAgents(unittest.TestCase):
 
     def test_prioritized_replay_buffer(self):
         buf = PrioritizedReplayBuffer(capacity=100, alpha=0.6, beta=0.4)
-        
+
         # Test empty buffer guard
         batch, idxs, weights = buf.sample(16)
         self.assertEqual(len(batch), 0)
@@ -252,7 +251,7 @@ class TestStateManager(unittest.TestCase):
     def test_interactive_simulation_injections(self):
         topo = build_evaluation_topology()
         self.sm.graph = topo.copy()
-        
+
         # Test Core Jamming injection
         self.sm.inject_core_congestion(utilization=0.96)
         self.assertAlmostEqual(self.sm.link_utilization[(1, 2)], 0.96)
@@ -293,11 +292,11 @@ class TestRoutingAndMulticastLogic(unittest.TestCase):
         dests = [5, 6, 7]
         terminals = [src] + dests
         tree = nx.algorithms.approximation.steinertree.steiner_tree(g, terminals, weight='weight')
-        
+
         # Tree must span all terminals
         for t in terminals:
             self.assertIn(t, tree.nodes())
-        
+
         # Tree must be connected
         self.assertTrue(nx.is_connected(tree))
         # Replication saving: tree edges must be fewer than independent unicast paths (3 * 3 = 9 edges)
@@ -397,7 +396,7 @@ class TestAdvancedTrafficEngineeringAndFailover(unittest.TestCase):
     def test_fast_failover_link_break(self):
         # Verify initial edge
         self.assertTrue(self.sm.graph.has_edge(1, 2))
-        
+
         # Inject fiber cut
         ok = self.sm.inject_link_failure(1, 2)
         self.assertTrue(ok)

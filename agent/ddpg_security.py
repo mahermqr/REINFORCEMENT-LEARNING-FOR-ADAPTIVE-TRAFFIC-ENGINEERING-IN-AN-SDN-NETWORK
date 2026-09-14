@@ -74,14 +74,14 @@ class DDPGSecurityAgent:
         self.noise_min = 0.02
         self.noise_decay = noise_decay
         self.memory = deque(maxlen=memory_size)
-        
+
         # Device auto-detection
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
+
         # Primary Actor and Critic
         self.actor = Actor(state_size, action_size).to(self.device)
         self.critic = Critic(state_size, action_size).to(self.device)
-        
+
         # Target Actor and Critic
         self.target_actor = Actor(state_size, action_size).to(self.device)
         self.target_critic = Critic(state_size, action_size).to(self.device)
@@ -89,11 +89,11 @@ class DDPGSecurityAgent:
         self.target_critic.load_state_dict(self.critic.state_dict())
         self.target_actor.eval()
         self.target_critic.eval()
-        
+
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=actor_lr)
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=critic_lr, weight_decay=1e-4)
         self.criterion = nn.SmoothL1Loss()
-        
+
         self.loss_history = []
 
     def act(self, state, add_noise=True):
@@ -103,13 +103,13 @@ class DDPGSecurityAgent:
         with torch.no_grad():
             action = self.actor(state_tensor).cpu().numpy()[0]
         self.actor.train()
-        
+
         if add_noise:
             noise = np.random.normal(0, self.noise_std, size=self.action_size)
             action = np.clip(action + noise, -1.0, 1.0)
             if self.noise_std > self.noise_min:
                 self.noise_std *= self.noise_decay
-                
+
         return float(action[0]) if self.action_size == 1 else action
 
     def remember(self, state, action, reward, next_state, done):

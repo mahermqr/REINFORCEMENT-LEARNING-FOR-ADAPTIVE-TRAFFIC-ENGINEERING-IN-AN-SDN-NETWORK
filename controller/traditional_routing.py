@@ -8,6 +8,7 @@ Implements classical network routing algorithms for head-to-head benchmarking:
  5. Random Path Routing
 """
 
+import itertools
 import networkx as nx
 import numpy as np
 
@@ -69,7 +70,6 @@ def widest_shortest_path(graph, src, dst, link_utilization, link_delays=None, ca
     """
     if candidate_paths is None:
         try:
-            import itertools
             candidate_paths = list(itertools.islice(nx.shortest_simple_paths(graph, src, dst), 8))
         except Exception:
             candidate_paths = [[src, dst]]
@@ -95,7 +95,6 @@ def least_loaded_routing(graph, src, dst, link_utilization, candidate_paths=None
     """
     if candidate_paths is None:
         try:
-            import itertools
             candidate_paths = list(itertools.islice(nx.shortest_simple_paths(graph, src, dst), 8))
         except Exception:
             candidate_paths = [[src, dst]]
@@ -125,7 +124,6 @@ def random_routing(graph, src, dst, candidate_paths=None):
     """
     if candidate_paths is None:
         try:
-            import itertools
             candidate_paths = list(itertools.islice(nx.shortest_simple_paths(graph, src, dst), 4))
         except Exception:
             candidate_paths = [[src, dst]]

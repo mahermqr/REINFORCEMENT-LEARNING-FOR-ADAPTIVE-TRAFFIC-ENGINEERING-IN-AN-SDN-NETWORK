@@ -92,7 +92,7 @@ class PrioritizedReplayBuffer:
             b = segment * (i + 1)
             s = random.uniform(a, b)
             idx, priority, data = self.tree.get(s)
-            
+
             # Fallback if unpopulated leaf
             if data is None or isinstance(data, (int, float)):
                 rand_idx = random.randint(0, max(0, self.tree.n_entries - 1))

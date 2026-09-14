@@ -19,7 +19,6 @@ from mininet.log import setLogLevel, info
 
 import time
 import threading
-import sys
 import argparse
 
 class TreeTopology(Topo):
@@ -48,7 +47,7 @@ class TreeTopology(Topo):
         self.addLink(s2, s5, bw=50, delay='3ms')
         self.addLink(s3, s6, bw=50, delay='3ms')
         self.addLink(s3, s7, bw=50, delay='3ms')
-        
+
         # Redundant mesh cross-links to provide alternate routing paths for DQN Unicast
         self.addLink(s4, s6, bw=30, delay='8ms')
         self.addLink(s5, s7, bw=30, delay='8ms')
@@ -175,7 +174,7 @@ def simulate_ddos_attack(net):
 
 def run_network(topo_choice='tree'):
     setLogLevel('info')
-    
+
     if topo_choice == 'fattree':
         info("*** Selected Topology: FatTree (k=4: 20 switches, 16 hosts)\n")
         topo = FatTreeTopology(k=4)

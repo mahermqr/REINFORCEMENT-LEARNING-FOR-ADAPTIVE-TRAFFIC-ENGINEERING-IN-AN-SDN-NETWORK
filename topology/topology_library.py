@@ -365,4 +365,3 @@ def list_available_topologies():
             'hosts': len(meta.get('hosts', []))
         })
     return res
-

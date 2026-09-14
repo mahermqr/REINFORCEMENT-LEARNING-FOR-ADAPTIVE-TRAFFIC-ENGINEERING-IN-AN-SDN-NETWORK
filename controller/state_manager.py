@@ -13,30 +13,30 @@ class StateManager:
     def __init__(self):
         # Topology graph: nodes are switch DPIDs, edges have 'port', 'bandwidth', 'delay', 'loss'
         self.graph = nx.DiGraph()
-        
+
         # Link metric dictionaries: keyed by (src_dpid, dst_dpid)
         self.link_bandwidths = {}   # Capacity in Mbps (default: 100 Mbps)
         self.link_utilization = {}  # Current utilization [0.0 - 1.0]
         self.link_delays = {}       # Latency in ms (default: 2.0 ms)
         self.link_loss = {}         # Packet loss rate [0.0 - 1.0]
-        
+
         # Host tracking tables: enables dynamic ARP/L2/L3 resolution
         self.host_ip_to_mac = {}    # ip -> mac
         self.host_locations = {}    # mac -> (dpid, port)
         self.ip_to_location = {}    # ip -> (dpid, port)
         self.mac_to_port = {}       # (dpid, mac) -> port
-        
+
         # Server resource utilization: keyed by dpid or host_ip
         self.server_cpu = collections.defaultdict(float)  # [0.0 - 1.0]
         self.server_ram = collections.defaultdict(float)  # [0.0 - 1.0]
-        
+
         # Telemetry history for rate calculation
         self.raw_port_stats = {}    # (dpid, port) -> {'rx_bytes', 'tx_bytes', 'rx_pkts', 'tx_pkts', 'timestamp'}
         self.port_rates = {}        # (dpid, port) -> {'rx_mbps', 'tx_mbps', 'rx_pps', 'tx_pps'}
-        
+
         self.raw_flow_stats = {}    # (dpid, src_ip, dst_ip) -> {'bytes', 'packets', 'duration', 'timestamp'}
         self.flow_stats = {}        # (dpid, src_ip, dst_ip) -> {'mbps', 'pps', 'packets', 'bytes', 'duration'}
-        
+
         # Traffic entropy and rate counters for DDoS detection
         self.src_ip_counter = collections.defaultdict(int)
         self.dst_ip_counter = collections.defaultdict(int)
@@ -45,17 +45,17 @@ class StateManager:
         self.recent_packet_count = 0
         self.recent_byte_count = 0
         self.cached_security_state = np.array([0.0, 1.0, 0.0, 0.0, 0.0], dtype=np.float32)
-        
+
         # Link failure recovery tracking: (u, v) -> edge_attributes
         self.failed_links = {}
-        
+
         # Rolling time-series telemetry history (up to 60 data points for live web charts)
         self.telemetry_history = collections.deque(maxlen=60)
         self.active_simulation_mode = None
-        
+
         # Multicast group registry: group_ip -> set of (receiver_dpid, receiver_port)
         self.multicast_groups = collections.defaultdict(set)
-        
+
         # Routing candidate path cache: (src_dpid, dst_dpid) -> list of candidate paths
         self._routing_path_cache = {}
 
@@ -78,7 +78,7 @@ class StateManager:
         """Adds or updates an inter-switch directional link."""
         self.register_switch(src_dpid)
         self.register_switch(dst_dpid)
-        
+
         self.graph.add_edge(src_dpid, dst_dpid, port=src_port, peer_port=dst_port)
         self._routing_path_cache.clear()
         self.link_bandwidths[(src_dpid, dst_dpid)] = capacity_mbps
@@ -130,36 +130,36 @@ class StateManager:
         """Updates port stats and computes differential Mbps and PPS rates."""
         now = time.time()
         key = (dpid, port_no)
-        
+
         if key in self.raw_port_stats:
             prev = self.raw_port_stats[key]
             dt = max(0.1, now - prev['timestamp'])
-            
+
             delta_rx_bytes = max(0, rx_bytes - prev['rx_bytes'])
             delta_tx_bytes = max(0, tx_bytes - prev['tx_bytes'])
             delta_rx_pkts = max(0, rx_packets - prev['rx_pkts'])
             delta_tx_pkts = max(0, tx_packets - prev['tx_pkts'])
-            
+
             # Rate in Mbps: (bytes * 8) / (1e6 * dt)
             rx_mbps = (delta_rx_bytes * 8.0) / (1e6 * dt)
             tx_mbps = (delta_tx_bytes * 8.0) / (1e6 * dt)
             rx_pps = delta_rx_pkts / dt
             tx_pps = delta_tx_pkts / dt
-            
+
             self.port_rates[key] = {
                 'rx_mbps': rx_mbps,
                 'tx_mbps': tx_mbps,
                 'rx_pps': rx_pps,
                 'tx_pps': tx_pps
             }
-            
+
             # Update link utilization if this port connects to an adjacent switch
             for neighbor in self.graph.successors(dpid):
                 edge_data = self.graph.get_edge_data(dpid, neighbor)
                 if edge_data and edge_data.get('port') == port_no:
                     capacity = self.link_bandwidths.get((dpid, neighbor), 100.0)
                     self.link_utilization[(dpid, neighbor)] = min(1.0, tx_mbps / max(1.0, capacity))
-        
+
         self.raw_port_stats[key] = {
             'rx_bytes': rx_bytes,
             'tx_bytes': tx_bytes,
@@ -173,29 +173,29 @@ class StateManager:
         """Updates flow counters and security metrics."""
         now = time.time()
         key = (dpid, src_ip, dst_ip)
-        
+
         delta_packets = packets
         delta_bytes = bytes_count
-        
+
         if key in self.raw_flow_stats:
             prev = self.raw_flow_stats[key]
             dt = max(0.1, now - prev['timestamp'])
             delta_packets = max(0, packets - prev['packets'])
             delta_bytes = max(0, bytes_count - prev['bytes'])
-            
+
             mbps = (delta_bytes * 8.0) / (1e6 * dt)
             pps = delta_packets / dt
         else:
             mbps = 0.0
             pps = 0.0
-            
+
         self.raw_flow_stats[key] = {
             'packets': packets,
             'bytes': bytes_count,
             'duration': duration_sec,
             'timestamp': now
         }
-        
+
         self.flow_stats[key] = {
             'mbps': mbps,
             'pps': pps,
@@ -203,7 +203,7 @@ class StateManager:
             'bytes': bytes_count,
             'duration': duration_sec
         }
-        
+
         if src_ip:
             self.src_ip_counter[src_ip] += delta_packets
             self.recent_packet_count += delta_packets
@@ -352,7 +352,7 @@ class StateManager:
         """
         state = np.zeros(50, dtype=np.float32)
         num_nodes = max(1, self.graph.number_of_nodes())
-        
+
         state[0] = (src_dpid % num_nodes) / float(num_nodes)
         for i, dst in enumerate(group_destinations[:5]):
             state[i + 1] = (dst % num_nodes) / float(num_nodes)
@@ -383,13 +383,13 @@ class StateManager:
         """Called periodically by monitor loop to compute Shannon entropy, rates, and record history."""
         now = time.time()
         dt = max(0.5, now - self.last_security_sample_time)
-        
+
         total_pkts = self.recent_packet_count
         total_bytes = self.recent_byte_count
-        
+
         pps = total_pkts / dt
         bpp = (total_bytes / max(1, total_pkts)) if total_pkts > 0 else 0.0
-        
+
         # Shannon Entropy
         entropy = 0.0
         if total_pkts > 0:
@@ -397,12 +397,12 @@ class StateManager:
                 if count > 0:
                     p = count / float(total_pkts)
                     entropy -= p * math.log2(p)
-                    
+
         max_possible_entropy = math.log2(max(2, len(self.src_ip_counter)))
         normalized_entropy = min(1.0, entropy / max(1.0, max_possible_entropy)) if total_pkts > 10 else 1.0
 
         num_flows = len(self.flow_stats)
-        
+
         self.cached_security_state = np.array([
             min(1.0, pps / 5000.0),
             normalized_entropy,

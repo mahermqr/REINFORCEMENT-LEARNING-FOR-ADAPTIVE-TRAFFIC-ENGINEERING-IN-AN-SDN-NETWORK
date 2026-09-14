@@ -18,14 +18,12 @@ Evaluates:
 
 import os
 import sys
-import time
 import json
 import random
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import networkx as nx
 
 # Add directories to path
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))

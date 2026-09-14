@@ -6,13 +6,10 @@ to drive the live Web Dashboard (http://localhost:8080) and test the Multi-Agent
 """
 
 import time
-import random
-import sys
 import os
 import json
 import argparse
 import urllib.request
-import urllib.error
 
 BASE_URL = os.environ.get("SDN_CONTROLLER_URL", "http://localhost:8080")
 

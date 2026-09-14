@@ -23,8 +23,6 @@ import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
 
-import itertools
-
 # Setup path imports
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(BASE_DIR, 'agent'))
@@ -241,14 +239,14 @@ def run_full_training(episodes=1000):
                 else:
                     c_pen = 1.5 * p_util
                 p_hops = len(p_cand) - 1
-                
+
                 # Competitive advantage reward bonus over SPF baseline
                 spf_advantage_bonus = 0.0
                 if p_util < spf_util:
                     spf_advantage_bonus += 4.0 * (spf_util - p_util)
                 if p_lat < spf_lat:
                     spf_advantage_bonus += 0.2 * (spf_lat - p_lat)
-                
+
                 p_reward = - (0.3 * p_hops + 0.05 * p_lat + c_pen) + spf_advantage_bonus
             else:
                 p_reward = -25.0 # Nonexistent path penalty
@@ -263,7 +261,7 @@ def run_full_training(episodes=1000):
         m_src = random.choice([4, 5])
         all_dests = [1, 2, 3, 4, 5, 6, 7]
         m_dests = [d for d in all_dests if d != m_src][:random.randint(2, 4)]
-        
+
         m_state = sm.get_multicast_state(m_src, m_dests)
         m_action = multicast_agent.act(m_state, explore=True)
         eval_m_action = multicast_agent.act(m_state, explore=False)
@@ -277,7 +275,7 @@ def run_full_training(episodes=1000):
         tree_edges = m_tree.number_of_edges()
         unicast_edges = len(m_dests) * 3
         bw_saved = max(0, (unicast_edges - tree_edges) * 10.0)
-        
+
         m_reward = float(bw_saved * 0.6 - tree_edges * 0.7)
         next_m_state = sm.get_multicast_state(m_src, m_dests)
         multicast_agent.remember(m_state, m_action, m_reward, next_m_state, done=True)
@@ -351,7 +349,7 @@ def run_full_training(episodes=1000):
             avg_spf_lat = np.mean(history['spf_avg_latency'][-print_interval:])
             avg_dqn_util = np.mean(history['dqn_bottleneck_util'][-print_interval:])
             avg_spf_util = np.mean(history['spf_bottleneck_util'][-print_interval:])
-            
+
             elapsed = time.time() - start_time
             print(f"[Ep {ep:4d}/{episodes} | {phase_name:<12}] Time: {elapsed:5.1f}s | "
                   f"DQN Util: {avg_dqn_util:4.1f}% (SPF: {avg_spf_util:4.1f}%) | "

@@ -53,7 +53,7 @@ class DQNRoutingAgent:
     real-time network state (link latency, bandwidth utilization, topology features).
     Supports Prioritized Experience Replay (PER), Polyak target updates, and GPU/CPU acceleration.
     """
-    def __init__(self, state_size=10, action_size=4, lr=0.001, gamma=0.95, 
+    def __init__(self, state_size=10, action_size=4, lr=0.001, gamma=0.95,
                  epsilon=1.0, epsilon_min=0.01, epsilon_decay=0.995, memory_size=5000, use_per=True, tau=0.005):
         self.state_size = state_size
         self.action_size = action_size
@@ -64,24 +64,24 @@ class DQNRoutingAgent:
         self.learning_rate = lr
         self.use_per = use_per
         self.tau = tau
-        
+
         if self.use_per:
             self.memory = PrioritizedReplayBuffer(capacity=memory_size)
         else:
             self.memory = deque(maxlen=memory_size)
-            
+
         # Automatic device selection (GPU if available, otherwise CPU)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
+
         # Build policy network and target network (Dueling Architecture)
         self.model = self._build_model().to(self.device)
         self.target_model = self._build_model().to(self.device)
         self.target_model.load_state_dict(self.model.state_dict())
         self.target_model.eval()
-        
+
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
         self.criterion = nn.SmoothL1Loss(reduction='none' if use_per else 'mean')
-        
+
         self.update_target_counter = 0
         self.target_update_freq = 10
         self.loss_history = []
@@ -94,7 +94,7 @@ class DQNRoutingAgent:
         """Epsilon-greedy action selection."""
         if explore and random.uniform(0, 1) <= self.epsilon:
             return random.randrange(self.action_size)
-        
+
         state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
         self.model.eval()
         with torch.no_grad():
@@ -109,7 +109,7 @@ class DQNRoutingAgent:
         r = float(reward)
         ns = np.array(next_state, dtype=np.float32)
         d = bool(done)
-        
+
         if self.use_per:
             self.memory.add(s, a, r, ns, d)
         else:

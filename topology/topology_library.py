@@ -365,3 +365,19 @@ def list_available_topologies():
             'hosts': len(meta.get('hosts', []))
         })
     return res
+
+
+if __name__ == '__main__':
+    print("=" * 75)
+    print(" 🌐 EC499 MULTI-TOPOLOGY GRAPH & TELEMETRY LIBRARY")
+    print("=" * 75)
+    topos = list_available_topologies()
+    print(f"{'ID':<12} | {'Topology Name':<32} | {'Switches':<9} | {'Links':<7} | {'Hosts'}")
+    print("-" * 75)
+    for t in topos:
+        print(f"{t['id']:<12} | {t['name']:<32} | {t['switches']:<9} | {t['links']:<7} | {t['hosts']}")
+    print("-" * 75)
+    print("Use in tournament: python3 benchmark_routing_algorithms.py")
+    print("Use in stress-test: python3 stress_test_blind_topologies.py")
+    print("=" * 75)
+

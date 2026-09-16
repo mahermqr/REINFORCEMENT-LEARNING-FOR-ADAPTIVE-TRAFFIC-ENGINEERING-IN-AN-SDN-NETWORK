@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Live Traffic Generator & SDN Simulation Driver for Ryu Controller (EC499)
-Injects dynamic traffic patterns, multicast requests, and DDoS bursts
-to drive the live Web Dashboard (http://localhost:8080) and test the Multi-Agent DRL fabric.
+Live Traffic Generator & SDN Simulation Driver for Ryu Controller (EC499).
+Injects dynamic traffic patterns, pod surges, core jamming, and link failures
+to drive the live Web Dashboard (http://localhost:8080) and test the DQN Adaptive Traffic Engineering agent.
 """
 
 import time
@@ -25,19 +25,18 @@ def http_post(endpoint, data=None):
         return json.loads(resp.read().decode('utf-8'))
 
 def run_simulation(mode="auto", interval=4.0, max_steps=0):
-    print("=" * 80)
-    print(" 🚀 STARTING SDN LIVE TRAFFIC GENERATOR & DRL TELEMETRY DRIVER")
+    print("=" * 85)
+    print(" 🚀 STARTING ADAPTIVE SDN TRAFFIC ENGINEERING SIMULATION DRIVER (EC499)")
     print(f" Target Controller Web API: {BASE_URL}")
     print(f" Simulation Mode:           {mode.upper()} (Interval: {interval}s)")
-    print("=" * 80)
+    print("=" * 85)
 
     step = 0
-    scenarios = ["traffic_burst", "core_jamming", "multicast", "ddos_attack", "reset"]
+    scenarios = ["traffic_burst", "core_jamming", "wcmp", "reset"]
     scenario_descriptions = {
-        "traffic_burst": "⚡ Pod Ingress Surge (h2->h5, h3->h7) via Double DQN",
-        "core_jamming":  "🔥 Core Switch Saturation (96% Load) -> Lateral Cross-Link Offload",
-        "multicast":     "📡 Multicast Group 224.1.1.1 Stream via Dueling DQN Steiner Tree",
-        "ddos_attack":   "🚨 High-Rate DDoS Flooding (h4: 5200 PPS) -> DDPG Drop Rule",
+        "traffic_burst": "⚡ Pod Ingress Surge (h2->h5, h3->h7) -> DQN Path Diversity",
+        "core_jamming":  "🔥 Core Switch Saturation (96% Load) -> Autonomous Lateral Rerouting",
+        "wcmp":          "⚖️ Weighted Cost Multi-Path (WCMP) Load Distribution",
         "reset":         "🔄 Nominal Baseline Network Stabilization"
     }
 
@@ -48,7 +47,6 @@ def run_simulation(mode="auto", interval=4.0, max_steps=0):
                 print("\n[Done] Reached maximum requested steps.")
                 break
 
-            # If specific mode requested or cycling in auto
             current_action = mode if mode != "auto" else scenarios[(step - 1) % len(scenarios)]
             action_desc = scenario_descriptions.get(current_action, current_action)
 
@@ -63,26 +61,26 @@ def run_simulation(mode="auto", interval=4.0, max_steps=0):
             # 2. Query telemetry
             try:
                 topo = http_get("/api/topology")
-                sec = http_get("/api/security")
                 stats = http_get("/api/stats")
+                ctrl = http_get("/api/control_overhead")
                 rl = http_get("/api/rl_metrics")
 
                 switches_count = len(topo.get('nodes', []))
                 links_count = len(topo.get('links', []))
                 throughput = stats.get('total_throughput_mbps', 0.0)
-                pps = stats.get('total_packet_rate_pps', 0.0)
-                entropy = sec.get('shannon_entropy', 1.0)
-                blocked = sec.get('blocked_ips', [])
+                bottleneck_u = stats.get('bottleneck_utilization_pct', 0.0)
+                latency = stats.get('mean_latency_ms', 0.0)
+                jitter = stats.get('mean_jitter_ms', 0.0)
+                loss = stats.get('mean_packet_loss_pct', 0.0)
                 flows = stats.get('active_flows_count', 0)
-
-                # Link loads
-                max_u = max([l.get('utilization', 0.0) for l in topo.get('links', [])] or [0.0])
-
-                status_str = "🚨 ATTACK MITIGATED" if (blocked or sec.get('ddos_alert')) else "🟢 NORMAL"
+                flow_mods = ctrl.get('flow_mod_count', 0)
+                dec_time = ctrl.get('mean_decision_latency_ms', 0.0)
 
                 print(f"[Step {step:03d}] {action_desc}")
-                print(f"         Switches: {switches_count} | Links: {links_count} | Throughput: {throughput:5.1f} Mbps | "
-                      f"PPS: {pps:5.0f} | Entropy: {entropy:.3f} | Max Link: {max_u:4.1f}% | {status_str} | Blocked: {blocked}")
+                print(f"         Switches: {switches_count} | Links: {links_count} | Flows: {flows} | "
+                      f"Throughput: {throughput:5.1f} Mbps | Peak Link: {bottleneck_u:4.1f}%")
+                print(f"         Latency: {latency:4.1f} ms | Jitter: {jitter:4.2f} ms | Packet Loss: {loss:4.2f}% | "
+                      f"FlowMods: {flow_mods} | Decision Latency: {dec_time:.2f} ms")
 
             except Exception as e:
                 print(f"[Step {step:03d}] Waiting for Ryu controller at {BASE_URL}: {e}")
@@ -98,10 +96,10 @@ def run_simulation(mode="auto", interval=4.0, max_steps=0):
         print("[*] Exited cleanly.")
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="SDN Multi-Agent Live Traffic Generator & Driver")
-    parser.add_argument('--mode', choices=['auto', 'traffic_burst', 'core_jamming', 'multicast', 'ddos_attack', 'reset'],
+    parser = argparse.ArgumentParser(description="SDN Adaptive Traffic Engineering Live Driver")
+    parser.add_argument('--mode', choices=['auto', 'traffic_burst', 'core_jamming', 'wcmp', 'reset'],
                         default='auto', help="Traffic simulation mode")
-    parser.add_argument('--interval', type=float, default=4.0, help="Delay between scenario cycles (seconds)")
+    parser.add_argument('--interval', type=float, default=3.0, help="Delay between scenario cycles (seconds)")
     parser.add_argument('--steps', type=int, default=0, help="Number of steps to run (0 for continuous)")
     args = parser.parse_args()
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Multi-Topology High-Intensity Blind Stress & Generalization Testing Suite (EC499)
-Evaluates trained Deep Reinforcement Learning agents ZERO-SHOT ("Going Blind") across:
+Multi-Topology High-Intensity Blind Stress & Generalization Testing Suite (EC499).
+Evaluates trained Deep Q-Network Traffic Engineering agent ZERO-SHOT ("Going Blind") across:
   1. Hierarchical Tree (Baseline Training Fabric - 7 Switches)
   2. Fat-Tree k=4 (Multi-Stage Data Center Clos - 20 Switches)
   3. Abilene Network (Continental US WAN Backbone - 12 Nodes)
@@ -12,8 +12,8 @@ Executes:
   - Scenario 1: Severe Core / Backbone Jamming (85% - 98% saturation)
   - Scenario 2: High-Concurrency Flow Avalanche (500 simultaneous flows)
   - Scenario 3: Asymmetric Regional Hotspot Surges
-  - Scenario 4: Dynamic Latency Spikes & Jitter (Core delay degraded 5x-10x)
-  - Scenario 5: Multicast Steiner Group Replication Savings
+  - Scenario 4: Dynamic Latency Spikes (Core delay degraded 5x-10x)
+  - Scenario 5: Network Jitter & Packet Loss Mitigation (RFC 3393)
 
 Generates:
   - logs/blind_topologies_stress_results.json
@@ -30,6 +30,8 @@ import math
 import itertools
 import numpy as np
 import networkx as nx
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -39,9 +41,9 @@ sys.path.append(os.path.join(BASE_DIR, 'controller'))
 sys.path.append(os.path.join(BASE_DIR, 'topology'))
 
 from dqn_router import DQNRoutingAgent
-from dqn_multicast import DQNMulticastAgent
 from state_manager import StateManager
 from topology_library import get_topology
+from traditional_routing import compute_path_metrics
 
 PLOTS_DIR = os.path.join(BASE_DIR, 'logs', 'plots')
 LOGS_DIR = os.path.join(BASE_DIR, 'logs')
@@ -57,11 +59,11 @@ def jains_fairness_index(loads):
 
 def run_blind_topology_stress_tests():
     print("=" * 85)
-    print(" 🚀 STARTING MULTI-TOPOLOGY BLIND STRESS & GENERALIZATION BENCHMARK SUITE")
-    print(" Evaluating Double DQN Unicast & Dueling DQN Multicast Zero-Shot Across 5 Fabrics")
+    print(" 🚀 STARTING MULTI-TOPOLOGY BLIND STRESS & GENERALIZATION BENCHMARK SUITE (EC499)")
+    print(" Evaluating Double DQN Traffic Engineering Zero-Shot Across 5 Fabrics")
     print("=" * 85)
 
-    # 1. Load trained agent checkpoints
+    # 1. Load trained agent checkpoint
     router_agent = DQNRoutingAgent(state_size=10, action_size=4)
     router_ckpt = os.path.join(BASE_DIR, 'models', 'dqn_router.pth')
     if not router_agent.load(router_ckpt):
@@ -69,46 +71,41 @@ def run_blind_topology_stress_tests():
         return
     print(f"[Init] Loaded trained Double DQN Router checkpoint from models/dqn_router.pth")
 
-    multicast_agent = DQNMulticastAgent(state_size=50, action_size=10)
-    m_ckpt = os.path.join(BASE_DIR, 'models', 'dqn_multicast.pth')
-    if os.path.exists(m_ckpt):
-        multicast_agent.load(m_ckpt)
-        print(f"[Init] Loaded trained Dueling DQN Multicast checkpoint from models/dqn_multicast.pth")
-
     results_summary = {}
 
     topo_order = ['tree', 'fattree', 'abilene', 'nsfnet', 'spineleaf']
     topo_labels = {
-        'tree': 'Tree (Baseline)',
-        'fattree': 'Fat-Tree (k=4)',
-        'abilene': 'Abilene WAN',
-        'nsfnet': 'NSFNet Mesh',
-        'spineleaf': 'Spine-Leaf'
+        'tree': 'Hierarchical Tree',
+        'fattree': 'Fat-Tree Clos (k=4)',
+        'abilene': 'Abilene US Backbone',
+        'nsfnet': 'NSFNet Continental',
+        'spineleaf': 'Spine-Leaf Fabric'
     }
 
     for topo_id in topo_order:
-        graph, meta = get_topology(topo_id)
-        topo_name = meta['name']
-        n_nodes = graph.number_of_nodes()
-        n_edges = graph.number_of_edges()
-
+        topo_name = topo_labels[topo_id]
         print("\n" + "=" * 85)
-        print(f" 🌐 TESTING BLIND GENERALIZATION ON: {topo_name.upper()}")
-        print(f" Topology Specs: {n_nodes} switches/nodes | {n_edges} directed edges")
+        print(f" 🌐 STRESS TESTING FABRIC: {topo_name.upper()}")
         print("=" * 85)
 
+        g, meta = get_topology(topo_id)
+        n_nodes = g.number_of_nodes()
+        n_edges = g.number_of_edges()
+        core_nodes = meta.get('core_nodes', [1])
+        edge_nodes = meta.get('edge_nodes', list(g.nodes()))
+
+        print(f" • Topology Characteristics: {n_nodes} Switches, {n_edges} Directed Links")
+        print(f" • Core Nodes: {core_nodes} | Edge Nodes: {len(edge_nodes)} switches")
+
         sm = StateManager()
-        sm.graph = graph.copy()
-        for u, v, data in graph.edges(data=True):
-            sm.update_link(u, v, src_port=1, dst_port=1, capacity_mbps=data['capacity'], delay_ms=data['delay'])
+        sm.graph = g.copy()
+        for u, v, d in g.edges(data=True):
+            sm.update_link(u, v, src_port=1, dst_port=1,
+                           capacity_mbps=d.get('capacity', 100.0),
+                           delay_ms=d.get('delay', 2.0))
 
-        edge_nodes = meta.get('edge_nodes', list(graph.nodes()))
-        core_nodes = meta.get('core_nodes', [list(graph.nodes())[0]])
-
-        # Path cache for topology to avoid redundant shortest_simple_paths traversals
         topo_path_cache = {}
 
-        # Helper to evaluate flow
         def evaluate_flow(src, dst):
             if (src, dst) not in topo_path_cache:
                 try:
@@ -122,15 +119,11 @@ def run_blind_topology_stress_tests():
             action = router_agent.act(state, explore=False)
             chosen_path = candidate_paths[action % len(candidate_paths)]
 
-            def p_metrics(p):
-                lat = sum(sm.link_delays.get((p[i], p[i+1]), 2.0) for i in range(len(p)-1))
-                util = max(sm.link_utilization.get((p[i], p[i+1]), 0.0) for i in range(len(p)-1))
-                return lat, util
+            m_dqn = compute_path_metrics(chosen_path, sm.link_utilization, sm.link_delays, sm.link_bandwidths)
+            m_spf = compute_path_metrics(spf_path, sm.link_utilization, sm.link_delays, sm.link_bandwidths)
 
-            d_lat, d_util = p_metrics(chosen_path)
-            s_lat, s_util = p_metrics(spf_path)
             rerouted = (chosen_path != spf_path)
-            return d_util, s_util, d_lat, s_lat, rerouted, chosen_path, spf_path
+            return m_dqn['bottleneck_util'], m_spf['bottleneck_util'], m_dqn['total_delay'], m_spf['total_delay'], rerouted, chosen_path, spf_path, m_dqn['jitter'], m_spf['jitter'], m_dqn['packet_loss'], m_spf['packet_loss']
 
         # ---------------------------------------------------------------------
         # TEST 1: Severe Core / Backbone Jamming (85% - 98% Saturation)
@@ -147,9 +140,8 @@ def run_blind_topology_stress_tests():
 
         for _ in range(n_samples):
             src = random.choice(edge_nodes)
-            dst_candidates = [n for n in edge_nodes if n != src]
-            dst = random.choice(dst_candidates)
-            du, su, dl, sl, rerouted, path, spf = evaluate_flow(src, dst)
+            dst = random.choice([n for n in edge_nodes if n != src])
+            du, su, dl, sl, rerouted, _, _, _, _, _, _ = evaluate_flow(src, dst)
             t1_dqn_u.append(du * 100.0)
             t1_spf_u.append(su * 100.0)
             t1_dqn_lat.append(dl)
@@ -175,77 +167,72 @@ def run_blind_topology_stress_tests():
 
         n_burst = 500
         t0 = time.time()
-        t2_reroutes = 0
         for _ in range(n_burst):
             src = random.choice(edge_nodes)
-            dst_candidates = [n for n in edge_nodes if n != src]
-            dst = random.choice(dst_candidates)
-            du, su, dl, sl, rerouted, dqn_path, spf_path = evaluate_flow(src, dst)
-            if rerouted:
-                t2_reroutes += 1
-
-            for i in range(len(dqn_path) - 1):
-                e = (dqn_path[i], dqn_path[i+1])
+            dst = random.choice([n for n in edge_nodes if n != src])
+            cands = sm.get_candidate_paths(src, dst, k=4)
+            st = sm.get_routing_state(src, dst)
+            act = router_agent.act(st, explore=False)
+            p_dqn = cands[act % len(cands)]
+            p_spf = cands[0]
+            for i in range(len(p_dqn)-1):
+                e = (p_dqn[i], p_dqn[i+1])
                 if e in link_loads_dqn:
-                    link_loads_dqn[e] = min(1.0, link_loads_dqn[e] + 0.015)
-            for i in range(len(spf_path) - 1):
-                e = (spf_path[i], spf_path[i+1])
+                    link_loads_dqn[e] += 1.0
+            for i in range(len(p_spf)-1):
+                e = (p_spf[i], p_spf[i+1])
                 if e in link_loads_spf:
-                    link_loads_spf[e] = min(1.0, link_loads_spf[e] + 0.015)
+                    link_loads_spf[e] += 1.0
 
         burst_duration = time.time() - t0
         decisions_sec = n_burst / max(0.001, burst_duration)
         jain_dqn = jains_fairness_index(list(link_loads_dqn.values()))
         jain_spf = jains_fairness_index(list(link_loads_spf.values()))
 
-        print(f" • Processed Burst:             500 concurrent flows in {burst_duration*1000:.1f} ms")
+        print(f" • Execution Time:              {burst_duration*1000:.1f} ms for 500 decisions")
         print(f" • Decision Throughput:         {decisions_sec:.1f} decisions/sec")
         print(f" • Jain's Fairness Index:       DQN: {jain_dqn:.4f} vs SPF: {jain_spf:.4f}")
-        print(f" • Peak Link Utilization:       DQN: {max(link_loads_dqn.values())*100:.1f}% vs SPF: {max(link_loads_spf.values())*100:.1f}%")
 
         # ---------------------------------------------------------------------
-        # TEST 3: Asymmetric Regional Hotspot Surge
+        # TEST 3: Asymmetric Regional Hotspot Surges
         # ---------------------------------------------------------------------
-        print(f"\n[Test 3/5] Asymmetric Hotspot Surge")
-        hotspot_node = edge_nodes[0]
+        print(f"\n[Test 3/5] Asymmetric Regional Hotspot Surge (Sub-Cluster Congestion)")
+        hotspot_nodes = edge_nodes[:max(2, len(edge_nodes)//3)]
         for u, v in sm.graph.edges():
-            if u == hotspot_node or v == hotspot_node:
-                sm.link_utilization[(u, v)] = random.uniform(0.80, 0.94)
+            if u in hotspot_nodes:
+                sm.link_utilization[(u, v)] = 0.88
             else:
-                sm.link_utilization[(u, v)] = random.uniform(0.10, 0.25)
+                sm.link_utilization[(u, v)] = 0.15
 
         t3_dqn_u, t3_spf_u, t3_diversions = [], [], 0
         for _ in range(100):
-            src = hotspot_node
-            dst = random.choice([n for n in edge_nodes if n != src])
-            du, su, dl, sl, rerouted, path, spf = evaluate_flow(src, dst)
+            src = random.choice(hotspot_nodes)
+            dst = random.choice([n for n in edge_nodes if n not in hotspot_nodes])
+            du, su, _, _, rerouted, _, _, _, _, _, _ = evaluate_flow(src, dst)
             t3_dqn_u.append(du * 100.0)
             t3_spf_u.append(su * 100.0)
             if rerouted:
                 t3_diversions += 1
 
         t3_relief = float(np.mean(t3_spf_u) - np.mean(t3_dqn_u))
-        print(f" • Hotspot Ingress Node:        Switch {hotspot_node} saturated to ~88%")
-        print(f" • Hotspot Load Relief:         +{t3_relief:.2f}% improvement")
-        print(f" • Autonomous Diversion Rate:   {t3_diversions}% diverted away from congested ingress")
+        print(f" • Hotspot Ingress Relief:      +{t3_relief:.2f}% load reduction")
+        print(f" • Local Link Bypass Rate:      {t3_diversions}% rerouted")
 
         # ---------------------------------------------------------------------
-        # TEST 4: Dynamic Latency Spikes (Core Delays Inflated 5x)
+        # TEST 4: Dynamic Delay Degradation
         # ---------------------------------------------------------------------
-        print(f"\n[Test 4/5] Dynamic Latency Degradation (Core links inflated to 25ms)")
+        print(f"\n[Test 4/5] Dynamic Delay Degradation (Core Link Delay 10x Inflated)")
         for u, v in sm.graph.edges():
             if u in core_nodes or v in core_nodes:
-                sm.link_delays[(u, v)] = 25.0
-                sm.link_utilization[(u, v)] = 0.50
+                sm.link_delays[(u, v)] = 20.0
             else:
-                sm.link_delays[(u, v)] = 4.0
-                sm.link_utilization[(u, v)] = 0.20
+                sm.link_delays[(u, v)] = 2.0
 
         t4_dqn_lats, t4_spf_lats = [], []
         for _ in range(100):
             src = random.choice(edge_nodes)
             dst = random.choice([n for n in edge_nodes if n != src])
-            du, su, dl, sl, rerouted, path, spf = evaluate_flow(src, dst)
+            _, _, dl, sl, _, _, _, _, _, _, _ = evaluate_flow(src, dst)
             t4_dqn_lats.append(dl)
             t4_spf_lats.append(sl)
 
@@ -255,26 +242,30 @@ def run_blind_topology_stress_tests():
         print(f" • Latency Savings:             -{t4_savings:.2f} ms (Faster via low-delay bypass!)")
 
         # ---------------------------------------------------------------------
-        # TEST 5: Multicast Steiner Tree Replication Savings
+        # TEST 5: Jitter & Packet Loss Mitigation (RFC 3393)
         # ---------------------------------------------------------------------
-        print(f"\n[Test 5/5] Multicast Group Replication Efficiency")
-        m_savings = []
-        for _ in range(50):
-            m_src = random.choice(edge_nodes)
-            m_dests = random.sample([n for n in edge_nodes if n != m_src], min(3, len(edge_nodes) - 1))
-            g_undir = sm.graph.to_undirected()
-            for u, v in g_undir.edges():
-                g_undir[u][v]['weight'] = 1.0 + sm.link_delays.get((u, v), 2.0) * 0.5
-            tree = nx.algorithms.approximation.steinertree.steiner_tree(g_undir, [m_src] + m_dests, weight='weight')
-            tree_edges = tree.number_of_edges()
-            unicast_edges = len(m_dests) * 3
-            bw_saved = max(0, (unicast_edges - tree_edges) * 10.0)
-            m_savings.append(bw_saved)
+        print(f"\n[Test 5/5] Jitter & Packet Loss Suppression (RFC 3393 / RFC 3550)")
+        t5_dqn_j, t5_spf_j = [], []
+        t5_dqn_loss, t5_spf_loss = [], []
+        for _ in range(100):
+            src = random.choice(edge_nodes)
+            dst = random.choice([n for n in edge_nodes if n != src])
+            _, _, _, _, _, _, _, dj, sj, dloss, sloss = evaluate_flow(src, dst)
+            t5_dqn_j.append(dj)
+            t5_spf_j.append(sj)
+            t5_dqn_loss.append(dloss)
+            t5_spf_loss.append(sloss)
 
-        avg_m_savings = float(np.mean(m_savings))
-        print(f" • Multicast Conserved Bandwidth: {avg_m_savings:.1f} Mbps average")
+        mean_dj = float(np.mean(t5_dqn_j))
+        mean_sj = float(np.mean(t5_spf_j))
+        mean_dloss = float(np.mean(t5_dqn_loss))
+        mean_sloss = float(np.mean(t5_spf_loss))
+        jitter_suppression_pct = max(0.0, ((mean_sj - mean_dj) / max(0.01, mean_sj)) * 100.0)
 
-        # Record summary record for this topology
+        print(f" • DQN Jitter:                  {mean_dj:.2f} ms (vs SPF: {mean_sj:.2f} ms)")
+        print(f" • Jitter Suppression:          {jitter_suppression_pct:.1f}%")
+        print(f" • DQN Packet Loss:             {mean_dloss:.2f}% (vs SPF: {mean_sloss:.2f}%)")
+
         results_summary[topo_id] = {
             "name": topo_name,
             "switches": n_nodes,
@@ -290,9 +281,7 @@ def run_blind_topology_stress_tests():
             "scenario_2_concurrency_burst": {
                 "decisions_per_sec": round(decisions_sec, 1),
                 "jains_fairness_dqn": round(float(jain_dqn), 4),
-                "jains_fairness_spf": round(float(jain_spf), 4),
-                "peak_load_dqn_pct": round(float(max(link_loads_dqn.values()) * 100), 1),
-                "peak_load_spf_pct": round(float(max(link_loads_spf.values()) * 100), 1)
+                "jains_fairness_spf": round(float(jain_spf), 4)
             },
             "scenario_3_hotspot_surge": {
                 "bottleneck_reduction_pct": round(t3_relief, 2),
@@ -303,97 +292,72 @@ def run_blind_topology_stress_tests():
                 "spf_latency_ms": round(float(np.mean(t4_spf_lats)), 2),
                 "latency_savings_ms": round(t4_savings, 2)
             },
-            "scenario_5_multicast": {
-                "average_bw_saved_mbps": round(avg_m_savings, 1)
+            "scenario_5_jitter_and_loss": {
+                "dqn_jitter_ms": round(mean_dj, 2),
+                "spf_jitter_ms": round(mean_sj, 2),
+                "jitter_suppression_pct": round(jitter_suppression_pct, 1),
+                "dqn_loss_pct": round(mean_dloss, 2),
+                "spf_loss_pct": round(mean_sloss, 2)
             }
         }
 
-    # =========================================================================
-    # GENERATE PUBLICATION FIGURES
-    # =========================================================================
-    print("\n" + "=" * 85)
-    print(" Generating Publication Plots across All 5 Topologies...")
-    print("=" * 85)
-
-    # 1. 4-Panel Comparative Benchmark Dashboard
+    # Generate 4-Panel Dashboard
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 11))
     labels = [topo_labels[t] for t in topo_order]
     x = np.arange(len(labels))
     width = 0.35
 
-    # Panel 1: Bottleneck Utilization (SPF vs Double DQN)
-    spf_utils = [results_summary[t]["scenario_1_core_jamming"]["dijkstra_spf_bottleneck_pct"] for t in topo_order]
-    dqn_utils = [results_summary[t]["scenario_1_core_jamming"]["double_dqn_bottleneck_pct"] for t in topo_order]
-
-    ax1.bar(x - width/2, spf_utils, width, label='Dijkstra (SPF)', color='#d62728', alpha=0.85)
-    ax1.bar(x + width/2, dqn_utils, width, label='Double DQN (Zero-Shot Blind)', color='#2ca02c', alpha=0.85)
-    ax1.set_title('Test 1: Peak Link Bottleneck under Core Jamming (%)', fontweight='bold', fontsize=11)
+    # 1. Core Jamming
+    spf_b = [results_summary[t]["scenario_1_core_jamming"]["dijkstra_spf_bottleneck_pct"] for t in topo_order]
+    dqn_b = [results_summary[t]["scenario_1_core_jamming"]["double_dqn_bottleneck_pct"] for t in topo_order]
+    ax1.bar(x - width/2, spf_b, width, label='Dijkstra SPF', color='#e74c3c', alpha=0.85)
+    ax1.bar(x + width/2, dqn_b, width, label='Double DQN (Ours)', color='#2ecc71', alpha=0.85)
+    ax1.set_title('Scenario 1: Core Jamming Bottleneck Load (%)', fontsize=11, fontweight='bold')
     ax1.set_ylabel('Bottleneck Utilization (%)')
     ax1.set_xticks(x)
     ax1.set_xticklabels(labels, rotation=15, ha='right', fontweight='bold')
-    ax1.set_ylim(0, 115)
     ax1.legend()
     ax1.grid(True, linestyle=':', alpha=0.6)
-    for i in range(len(labels)):
-        ax1.text(x[i] - width/2, spf_utils[i] + 2, f"{spf_utils[i]:.1f}%", ha='center', fontsize=9)
-        ax1.text(x[i] + width/2, dqn_utils[i] + 2, f"{dqn_utils[i]:.1f}%", ha='center', fontsize=9, fontweight='bold')
 
-    # Panel 2: Congestion Relief & Autonomous Offload Rate
-    relief_vals = [results_summary[t]["scenario_1_core_jamming"]["congestion_reduction_pct"] for t in topo_order]
-    offload_vals = [results_summary[t]["scenario_1_core_jamming"]["autonomous_offload_rate_pct"] for t in topo_order]
-
-    ax2.bar(x - width/2, relief_vals, width, label='Congestion Relief (+%)', color='#1f77b4', alpha=0.85)
-    ax2.bar(x + width/2, offload_vals, width, label='Autonomous Offload Rate (%)', color='#9467bd', alpha=0.85)
-    ax2.set_title('Test 1: Zero-Shot Congestion Relief & Offload Rate', fontweight='bold', fontsize=11)
-    ax2.set_ylabel('Percentage (%)')
+    # 2. Decision Throughput
+    dec_speeds = [results_summary[t]["scenario_2_concurrency_burst"]["decisions_per_sec"] for t in topo_order]
+    ax2.bar(x, dec_speeds, color='#3498db', alpha=0.85, width=0.5)
+    ax2.set_title('Scenario 2: Decision Throughput (decisions/sec)', fontsize=11, fontweight='bold')
+    ax2.set_ylabel('Decisions / Second')
     ax2.set_xticks(x)
     ax2.set_xticklabels(labels, rotation=15, ha='right', fontweight='bold')
-    ax2.set_ylim(0, 115)
-    ax2.legend()
     ax2.grid(True, linestyle=':', alpha=0.6)
-    for i in range(len(labels)):
-        ax2.text(x[i] - width/2, relief_vals[i] + 2, f"+{relief_vals[i]:.1f}%", ha='center', fontsize=9, fontweight='bold')
-        ax2.text(x[i] + width/2, offload_vals[i] + 2, f"{offload_vals[i]:.0f}%", ha='center', fontsize=9)
 
-    # Panel 3: Controller Throughput & Jain's Fairness
-    jain_dqn_vals = [results_summary[t]["scenario_2_concurrency_burst"]["jains_fairness_dqn"] for t in topo_order]
-    jain_spf_vals = [results_summary[t]["scenario_2_concurrency_burst"]["jains_fairness_spf"] for t in topo_order]
-
-    ax3.plot(labels, jain_dqn_vals, marker='o', lw=2.5, color='#2ca02c', label="DQN Jain's Index")
-    ax3.plot(labels, jain_spf_vals, marker='s', lw=2.0, ls='--', color='#d62728', label="SPF Jain's Index")
-    ax3.set_title("Test 2: Load Uniformity (Jain's Fairness Index)", fontweight='bold', fontsize=11)
-    ax3.set_ylabel("Jain's Index (Higher is Better)")
-    ax3.set_ylim(0.2, 1.05)
-    ax3.legend(loc='lower right')
+    # 3. Hotspot Relief
+    hotspot_relief = [results_summary[t]["scenario_3_hotspot_surge"]["bottleneck_reduction_pct"] for t in topo_order]
+    ax3.bar(x, hotspot_relief, color='#9b59b6', alpha=0.85, width=0.5)
+    ax3.set_title('Scenario 3: Asymmetric Hotspot Relief (% Load Reduction)', fontsize=11, fontweight='bold')
+    ax3.set_ylabel('Load Reduction (%)')
+    ax3.set_xticks(x)
+    ax3.set_xticklabels(labels, rotation=15, ha='right', fontweight='bold')
     ax3.grid(True, linestyle=':', alpha=0.6)
-    for i, txt in enumerate(jain_dqn_vals):
-        ax3.annotate(f"{txt:.3f}", (labels[i], jain_dqn_vals[i] + 0.03), ha='center', fontweight='bold')
 
-    # Panel 4: Latency Trade-off under Degraded Core Links
-    dqn_lats = [results_summary[t]["scenario_4_latency_degradation"]["dqn_latency_ms"] for t in topo_order]
+    # 4. Latency
     spf_lats = [results_summary[t]["scenario_4_latency_degradation"]["spf_latency_ms"] for t in topo_order]
-
-    ax4.bar(x - width/2, spf_lats, width, label='Dijkstra (Core Degraded)', color='#ff7f0e', alpha=0.85)
-    ax4.bar(x + width/2, dqn_lats, width, label='Double DQN (Bypass Path)', color='#1f77b4', alpha=0.85)
-    ax4.set_title('Test 4: Latency under Core Degradation (ms)', fontweight='bold', fontsize=11)
+    dqn_lats = [results_summary[t]["scenario_4_latency_degradation"]["dqn_latency_ms"] for t in topo_order]
+    ax4.bar(x - width/2, spf_lats, width, label='Dijkstra SPF', color='#e67e22', alpha=0.85)
+    ax4.bar(x + width/2, dqn_lats, width, label='Double DQN (Ours)', color='#1abc9c', alpha=0.85)
+    ax4.set_title('Scenario 4: Latency under Core Link Delay Degradation', fontsize=11, fontweight='bold')
     ax4.set_ylabel('End-to-End Latency (ms)')
     ax4.set_xticks(x)
     ax4.set_xticklabels(labels, rotation=15, ha='right', fontweight='bold')
     ax4.legend()
     ax4.grid(True, linestyle=':', alpha=0.6)
-    for i in range(len(labels)):
-        ax4.text(x[i] - width/2, spf_lats[i] + 1.5, f"{spf_lats[i]:.1f}", ha='center', fontsize=9)
-        ax4.text(x[i] + width/2, dqn_lats[i] + 1.5, f"{dqn_lats[i]:.1f}", ha='center', fontsize=9, fontweight='bold')
 
-    plt.suptitle('Multi-Topology Blind Stress Testing: DRL Zero-Shot Generalization Benchmark', fontsize=14, fontweight='bold')
+    plt.suptitle('Multi-Topology Blind Stress Testing: DQN Traffic Engineering Generalization Benchmark', fontsize=13, fontweight='bold')
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     bench_plot = os.path.join(PLOTS_DIR, 'blind_topologies_stress_benchmark.png')
     plt.savefig(bench_plot, dpi=300)
     plt.close()
     print(f" • Saved Benchmark Plot to: {bench_plot}")
 
-    # 2. Radar Chart: Multi-Dimensional Resilience Profile across Topologies
-    categories = ['Congestion Relief (%)', 'Offload Rate (%)', 'Fairness (x100)', 'Latency Avoidance (%)', 'Multicast Savings (Mbps)']
+    # Radar Chart
+    categories = ['Congestion Relief (%)', 'Offload Rate (%)', 'Fairness (x100)', 'Latency Avoidance (%)', 'Jitter Suppression (%)']
     N_cat = len(categories)
     angles = [n / float(N_cat) * 2 * math.pi for n in range(N_cat)]
     angles += angles[:1]
@@ -405,15 +369,15 @@ def run_blind_topology_stress_tests():
         s1 = results_summary[t]["scenario_1_core_jamming"]
         s2 = results_summary[t]["scenario_2_concurrency_burst"]
         s4 = results_summary[t]["scenario_4_latency_degradation"]
-        s5 = results_summary[t]["scenario_5_multicast"]
+        s5 = results_summary[t]["scenario_5_jitter_and_loss"]
 
         lat_pct = max(0.0, ((s4['spf_latency_ms'] - s4['dqn_latency_ms']) / max(1.0, s4['spf_latency_ms'])) * 100.0)
         values = [
-            min(100.0, max(0.0, s1['congestion_reduction_pct'] * 2.0)), # Scaled
+            min(100.0, max(0.0, s1['congestion_reduction_pct'] * 2.0)),
             min(100.0, s1['autonomous_offload_rate_pct']),
             min(100.0, s2['jains_fairness_dqn'] * 100.0),
             min(100.0, lat_pct),
-            min(100.0, s5['average_bw_saved_mbps'] * 1.5)
+            min(100.0, s5['jitter_suppression_pct'])
         ]
         values += values[:1]
         ax_r.plot(angles, values, lw=2, label=topo_labels[t], color=colors_radar[idx])

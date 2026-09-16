@@ -9,8 +9,8 @@ BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_PATH="/home/maher/ec499_env"
 
 echo "======================================================================"
-echo " Starting Adaptive SDN Traffic Engineering Platform"
-echo " Ryu OpenFlow 1.3 Controller + Double DQN / Dueling DQN / DDPG"
+echo " Starting Adaptive SDN Traffic Engineering Platform (EC499)"
+echo " Ryu OpenFlow 1.3 Controller + Deep Q-Network (DQN) Routing Engine"
 echo " Web Dashboard: http://localhost:8080"
 echo "======================================================================"
 

@@ -17,11 +17,24 @@
       "justMyCode": false
     },
     {
-      "name": "Train Multi-Agent DRL (1000 Episodes)",
+      "name": "Train DQN Traffic Engineering (1000 Episodes)",
       "type": "python",
       "request": "launch",
       "program": "${workspaceFolder}/benchmark_evaluation.py",
-      "args": ["1000"],
+      "args": [
+        "1000"
+      ],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}:${workspaceFolder}/agent:${workspaceFolder}/controller"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Run Tournament Benchmark (DQN vs OSPF & Greedy)",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/benchmark_routing_algorithms.py",
       "env": {
         "PYTHONPATH": "${workspaceFolder}:${workspaceFolder}/agent:${workspaceFolder}/controller"
       },
@@ -48,10 +61,14 @@
       "sudo": true
     },
     {
-      "name": "Simulate Live Traffic Driver",
+      "name": "Live Traffic Simulation Driver",
       "type": "python",
       "request": "launch",
       "program": "${workspaceFolder}/simulate_live_traffic.py",
+      "args": [
+        "--mode",
+        "auto"
+      ],
       "console": "integratedTerminal"
     }
   ]

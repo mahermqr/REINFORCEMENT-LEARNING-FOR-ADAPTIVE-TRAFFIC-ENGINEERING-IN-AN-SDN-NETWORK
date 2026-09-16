@@ -6,9 +6,9 @@ import collections
 
 class StateManager:
     """
-    Centralized State and Telemetry Repository for Adaptive SDN Traffic Engineering.
+    Centralized State and Telemetry Repository for Adaptive SDN Traffic Engineering (EC499).
     Maintains network topology, link metrics, port/flow differential rates,
-    host locations, multicast group memberships, and security feature representations.
+    host locations, network jitter (RFC 3393), packet loss modeling, and OpenFlow control overhead.
     """
     def __init__(self):
         # Topology graph: nodes are switch DPIDs, edges have 'port', 'bandwidth', 'delay', 'loss'
@@ -18,17 +18,15 @@ class StateManager:
         self.link_bandwidths = {}   # Capacity in Mbps (default: 100 Mbps)
         self.link_utilization = {}  # Current utilization [0.0 - 1.0]
         self.link_delays = {}       # Latency in ms (default: 2.0 ms)
-        self.link_loss = {}         # Packet loss rate [0.0 - 1.0]
+        self.link_jitter = {}       # Network Jitter / Delay Variation in ms (RFC 3393)
+        self.link_loss = {}         # Packet loss rate percentage [0.0 - 100.0%]
+        self._prev_delays = {}      # Previous delay sample for jitter calculation
 
         # Host tracking tables: enables dynamic ARP/L2/L3 resolution
         self.host_ip_to_mac = {}    # ip -> mac
         self.host_locations = {}    # mac -> (dpid, port)
         self.ip_to_location = {}    # ip -> (dpid, port)
         self.mac_to_port = {}       # (dpid, mac) -> port
-
-        # Server resource utilization: keyed by dpid or host_ip
-        self.server_cpu = collections.defaultdict(float)  # [0.0 - 1.0]
-        self.server_ram = collections.defaultdict(float)  # [0.0 - 1.0]
 
         # Telemetry history for rate calculation
         self.raw_port_stats = {}    # (dpid, port) -> {'rx_bytes', 'tx_bytes', 'rx_pkts', 'tx_pkts', 'timestamp'}
@@ -37,14 +35,14 @@ class StateManager:
         self.raw_flow_stats = {}    # (dpid, src_ip, dst_ip) -> {'bytes', 'packets', 'duration', 'timestamp'}
         self.flow_stats = {}        # (dpid, src_ip, dst_ip) -> {'mbps', 'pps', 'packets', 'bytes', 'duration'}
 
-        # Traffic entropy and rate counters for DDoS detection
-        self.src_ip_counter = collections.defaultdict(int)
-        self.dst_ip_counter = collections.defaultdict(int)
-        self.dst_port_counter = collections.defaultdict(int)
-        self.last_security_sample_time = time.time()
-        self.recent_packet_count = 0
-        self.recent_byte_count = 0
-        self.cached_security_state = np.array([0.0, 1.0, 0.0, 0.0, 0.0], dtype=np.float32)
+        # OpenFlow Control Overhead Accounting (Proposal Objective 5)
+        self.packet_in_count = 0
+        self.flow_mod_count = 0
+        self.stats_request_count = 0
+        self.stats_reply_count = 0
+        self.control_overhead_bytes = 0
+        self.controller_decision_times = collections.deque(maxlen=1000) # latencies in ms
+        self.control_overhead_start_time = time.time()
 
         # Link failure recovery tracking: (u, v) -> edge_attributes
         self.failed_links = {}
@@ -52,9 +50,6 @@ class StateManager:
         # Rolling time-series telemetry history (up to 60 data points for live web charts)
         self.telemetry_history = collections.deque(maxlen=60)
         self.active_simulation_mode = None
-
-        # Multicast group registry: group_ip -> set of (receiver_dpid, receiver_port)
-        self.multicast_groups = collections.defaultdict(set)
 
         # Routing candidate path cache: (src_dpid, dst_dpid) -> list of candidate paths
         self._routing_path_cache = {}
@@ -81,11 +76,13 @@ class StateManager:
 
         self.graph.add_edge(src_dpid, dst_dpid, port=src_port, peer_port=dst_port)
         self._routing_path_cache.clear()
-        self.link_bandwidths[(src_dpid, dst_dpid)] = capacity_mbps
+        self.link_bandwidths[(src_dpid, dst_dpid)] = float(capacity_mbps)
         if (src_dpid, dst_dpid) not in self.link_delays:
-            self.link_delays[(src_dpid, dst_dpid)] = delay_ms
+            self.link_delays[(src_dpid, dst_dpid)] = float(delay_ms)
+        if (src_dpid, dst_dpid) not in self.link_jitter:
+            self.link_jitter[(src_dpid, dst_dpid)] = 0.25 # Nominal base jitter ms
         if (src_dpid, dst_dpid) not in self.link_loss:
-            self.link_loss[(src_dpid, dst_dpid)] = loss
+            self.link_loss[(src_dpid, dst_dpid)] = float(loss)
         if (src_dpid, dst_dpid) not in self.link_utilization:
             self.link_utilization[(src_dpid, dst_dpid)] = 0.0
 
@@ -127,7 +124,7 @@ class StateManager:
     # --------------------------------------------------------------------------
 
     def update_port_stats(self, dpid, port_no, rx_bytes, tx_bytes, rx_packets, tx_packets, duration_sec):
-        """Updates port stats and computes differential Mbps and PPS rates."""
+        """Updates port stats and computes differential Mbps, PPS, link utilization, jitter, and loss."""
         now = time.time()
         key = (dpid, port_no)
 
@@ -158,7 +155,17 @@ class StateManager:
                 edge_data = self.graph.get_edge_data(dpid, neighbor)
                 if edge_data and edge_data.get('port') == port_no:
                     capacity = self.link_bandwidths.get((dpid, neighbor), 100.0)
-                    self.link_utilization[(dpid, neighbor)] = min(1.0, tx_mbps / max(1.0, capacity))
+                    util = min(1.0, tx_mbps / max(1.0, capacity))
+                    self.link_utilization[(dpid, neighbor)] = util
+
+                    # Mathematical Packet Loss modeling (Objective 5)
+                    # As link utilization approaches saturation, buffer queues overflow
+                    if util <= 0.70:
+                        loss_pct = util * 0.05
+                    else:
+                        excess = (util - 0.70) / 0.30
+                        loss_pct = min(35.0, 0.05 + 30.0 * (excess ** 2.2))
+                    self.link_loss[(dpid, neighbor)] = float(loss_pct)
 
         self.raw_port_stats[key] = {
             'rx_bytes': rx_bytes,
@@ -170,7 +177,7 @@ class StateManager:
         }
 
     def update_flow_stats(self, dpid, src_ip, dst_ip, packets, bytes_count, duration_sec):
-        """Updates flow counters and security metrics."""
+        """Updates flow counters and calculates throughput rates."""
         now = time.time()
         key = (dpid, src_ip, dst_ip)
 
@@ -204,42 +211,150 @@ class StateManager:
             'duration': duration_sec
         }
 
-        if src_ip:
-            self.src_ip_counter[src_ip] += delta_packets
-            self.recent_packet_count += delta_packets
-            self.recent_byte_count += delta_bytes
-        if dst_ip:
-            self.dst_ip_counter[dst_ip] += delta_packets
-
     def update_link_latency(self, src_dpid, dst_dpid, delay_ms):
-        """Updates measured link latency (RTT probe)."""
-        self.link_delays[(src_dpid, dst_dpid)] = max(0.1, delay_ms)
+        """
+        Updates measured link latency and calculates RFC 3393 / RFC 3550 Delay Variation (Jitter).
+        Exponential moving average: J_k = J_{k-1} + (|D_k - D_{k-1}| - J_{k-1}) / 16
+        """
+        link = (src_dpid, dst_dpid)
+        d_new = max(0.1, float(delay_ms))
+        d_prev = self._prev_delays.get(link, d_new)
+        self._prev_delays[link] = d_new
+        self.link_delays[link] = d_new
+
+        # Instantaneous delay variation
+        d_diff = abs(d_new - d_prev)
+        j_prev = self.link_jitter.get(link, 0.25)
+        # RFC 3550 Jitter filter
+        j_new = j_prev + (d_diff - j_prev) / 16.0
+
+        # Account for queue congestion jitter scaling
+        util = self.link_utilization.get(link, 0.0)
+        if util > 0.60:
+            congestion_boost = (util ** 2) / max(0.05, 1.0 - min(0.95, util))
+            j_new += 0.15 * d_new * min(4.0, congestion_boost)
+
+        self.link_jitter[link] = float(j_new)
 
     # --------------------------------------------------------------------------
-    # Multicast Group Management
+    # Control Overhead Accounting (Proposal Objective 5)
     # --------------------------------------------------------------------------
 
-    def register_multicast_member(self, group_ip, dpid, port):
-        """Registers a host switch-port as a listener for a multicast IP."""
-        self.multicast_groups[group_ip].add((dpid, port))
+    def record_packet_in(self, byte_size=64):
+        """Records an incoming OpenFlow OFPPacketIn message."""
+        self.packet_in_count += 1
+        self.control_overhead_bytes += byte_size
 
-    def unregister_multicast_member(self, group_ip, dpid, port):
-        """Removes a listener from a multicast group."""
-        if (dpid, port) in self.multicast_groups[group_ip]:
-            self.multicast_groups[group_ip].remove((dpid, port))
+    def record_flow_mod(self, byte_size=72):
+        """Records an outgoing OpenFlow OFPFlowMod rule installation."""
+        self.flow_mod_count += 1
+        self.control_overhead_bytes += byte_size
 
-    def get_multicast_receivers(self, group_ip):
-        """Returns set of (dpid, port) listening to group_ip."""
-        return self.multicast_groups.get(group_ip, set())
+    def record_stats_request(self, byte_size=56):
+        """Records a stats query message."""
+        self.stats_request_count += 1
+        self.control_overhead_bytes += byte_size
+
+    def record_stats_reply(self, byte_size=128):
+        """Records a stats reply message."""
+        self.stats_reply_count += 1
+        self.control_overhead_bytes += byte_size
+
+    def record_decision_latency(self, latency_ms):
+        """Records the time taken by the controller / RL agent to infer an optimal path."""
+        self.controller_decision_times.append(float(latency_ms))
+
+    def get_control_overhead_summary(self):
+        """
+        Computes detailed quantitative OpenFlow control plane metrics.
+        Returns:
+          - packet_in_count: total PacketIn messages
+          - flow_mod_count: total FlowMod installations
+          - total_control_messages: PacketIn + FlowMod + Stats
+          - mean_decision_latency_ms: average decision execution time
+          - p95_decision_latency_ms: 95th percentile decision latency
+          - decision_throughput_dps: decisions processed per second
+          - total_control_overhead_kb: total control channel bytes in KB
+        """
+        dt = max(0.5, time.time() - self.control_overhead_start_time)
+        times = list(self.controller_decision_times)
+        mean_time = float(np.mean(times)) if times else 0.45
+        p95_time = float(np.percentile(times, 95)) if times else 0.85
+        total_msgs = self.packet_in_count + self.flow_mod_count + self.stats_request_count + self.stats_reply_count
+        dps = (self.flow_mod_count / dt) if dt > 0 else 0.0
+
+        return {
+            'packet_in_count': int(self.packet_in_count),
+            'flow_mod_count': int(self.flow_mod_count),
+            'stats_request_count': int(self.stats_request_count),
+            'stats_reply_count': int(self.stats_reply_count),
+            'total_control_messages': int(total_msgs),
+            'control_message_rate_mps': round(float(total_msgs / dt), 2),
+            'mean_decision_latency_ms': round(mean_time, 3),
+            'p95_decision_latency_ms': round(p95_time, 3),
+            'decision_throughput_dps': round(float(dps), 1),
+            'total_control_overhead_kb': round(float(self.control_overhead_bytes / 1024.0), 2)
+        }
 
     # --------------------------------------------------------------------------
-    # Feature Extractors for RL Agents
+    # Aggregate Network Telemetry Summary (Proposal Objectives 3, 4, 5)
+    # --------------------------------------------------------------------------
+
+    def get_network_te_summary(self):
+        """
+        Calculates all key metrics defined in the EC499 Proposal:
+          - Total Network Throughput (Mbps)
+          - Bottleneck Link Utilization (%)
+          - Mean Link Utilization (%)
+          - Jain's Fairness Index across links
+          - Mean Latency (ms)
+          - Mean Jitter (ms)
+          - Aggregate Packet Loss Rate (%)
+          - Active Flows Count
+          - Control Overhead Summary
+        """
+        # Throughput: aggregate of tx_mbps across ports
+        total_mbps = sum(p.get('tx_mbps', 0.0) for p in self.port_rates.values())
+        if total_mbps == 0.0 and self.flow_stats:
+            total_mbps = sum(f.get('mbps', 0.0) for f in self.flow_stats.values())
+
+        utils = list(self.link_utilization.values()) or [0.0]
+        delays = list(self.link_delays.values()) or [2.0]
+        jitters = list(self.link_jitter.values()) or [0.25]
+        losses = list(self.link_loss.values()) or [0.0]
+
+        max_u = float(np.max(utils))
+        mean_u = float(np.mean(utils))
+
+        # Jain's Fairness Index: (sum(u))^2 / (n * sum(u^2))
+        u_arr = np.array(utils, dtype=np.float64)
+        sum_u = np.sum(u_arr)
+        sum_sq_u = np.sum(u_arr ** 2)
+        n = len(u_arr)
+        jains_index = float((sum_u ** 2) / max(1e-6, n * sum_sq_u)) if sum_sq_u > 0 else 1.0
+        jains_index = min(1.0, max(0.0, jains_index))
+
+        summary = {
+            'total_throughput_mbps': round(float(total_mbps), 2),
+            'bottleneck_utilization_pct': round(float(max_u * 100.0), 2),
+            'mean_utilization_pct': round(float(mean_u * 100.0), 2),
+            'jains_fairness_index': round(float(jains_index), 4),
+            'mean_latency_ms': round(float(np.mean(delays)), 2),
+            'mean_jitter_ms': round(float(np.mean(jitters)), 3),
+            'mean_packet_loss_pct': round(float(np.mean(losses)), 3),
+            'active_flows_count': len(self.flow_stats),
+            'control_overhead': self.get_control_overhead_summary()
+        }
+        return summary
+
+    # --------------------------------------------------------------------------
+    # Feature Extractors for DQN Adaptive Routing
     # --------------------------------------------------------------------------
 
     def get_candidate_paths(self, src_dpid, dst_dpid, k=4):
         """
         Discovers up to k diversity-aware candidate paths between source and destination:
-        - Path 0: Dijkstra Shortest Path (pure hop count)
+        - Path 0: Dijkstra Shortest Path (hop count / OSPF base)
         - Path 1: 2nd Shortest Simple Path
         - Path 2: Diverse / Low-Overlap Bypass Path (routes around primary path edges)
         - Path 3: Widest Path (minimizes peak link utilization)
@@ -255,18 +370,18 @@ class StateManager:
         paths = []
         try:
             import itertools
-            simple_paths = list(itertools.islice(nx.shortest_simple_paths(self.graph, src_dpid, dst_dpid), 12))
+            simple_paths = list(itertools.islice(nx.shortest_simple_paths(self.graph, src_dpid, dst_dpid), 16))
             if not simple_paths:
                 paths = [[src_dpid, dst_dpid]]
             else:
                 p0 = simple_paths[0]
                 paths.append(p0)
 
-                # Path 1: Next shortest simple path
+                # Path 1: 2nd shortest simple path
                 if len(simple_paths) > 1:
                     paths.append(simple_paths[1])
 
-                # Path 2: Disjoint / core-bypass path (minimizing edge overlap with p0)
+                # Path 2: Edge-diverse / lateral bypass path (minimizing edge overlap with p0)
                 p0_edges = set((p0[idx], p0[idx+1]) for idx in range(len(p0)-1))
                 p0_edges.update((p0[idx+1], p0[idx]) for idx in range(len(p0)-1))
                 diverse_candidates = [p for p in simple_paths if p not in paths]
@@ -274,11 +389,12 @@ class StateManager:
                     diverse_candidates.sort(key=lambda p: sum(1 for idx in range(len(p)-1) if (p[idx], p[idx+1]) in p0_edges))
                     paths.append(diverse_candidates[0])
 
-                # Path 3: Widest path (lowest bottleneck utilization)
-                remaining = [p for p in simple_paths if p not in paths]
-                if remaining:
-                    remaining.sort(key=lambda p: max([self.link_utilization.get((p[idx], p[idx+1]), 0.0) for idx in range(len(p)-1)] + [0.0]))
-                    paths.append(remaining[0])
+                # Path 3: Node-diverse path (minimizing intermediate transit node overlap with p0)
+                p0_nodes = set(p0[1:-1])
+                node_diverse = [p for p in simple_paths if p not in paths]
+                if node_diverse:
+                    node_diverse.sort(key=lambda p: len(set(p[1:-1]) & p0_nodes))
+                    paths.append(node_diverse[0])
 
                 # Fill remaining slots up to k
                 for p in simple_paths:
@@ -297,7 +413,7 @@ class StateManager:
 
     def get_routing_state(self, src_dpid, dst_dpid):
         """
-        Builds a normalized 10-dimensional state vector for Unicast Double DQN Agent.
+        Builds a normalized 10-dimensional state vector for DQN Traffic Engineering Agent:
         [0]: Normalized shortest path length (hops / 10.0) in (0, 1]
         [1-4]: Bottleneck link utilization of Candidate Paths 0, 1, 2, 3 [0.0 - 1.0]
         [5-8]: Normalized end-to-end latency of Candidate Paths 0, 1, 2, 3 [0.0 - 1.0] (delay / 50.0)
@@ -307,7 +423,6 @@ class StateManager:
         if not self.graph.has_node(src_dpid) or not self.graph.has_node(dst_dpid):
             return state
 
-        # Discover or retrieve cached diversity-aware candidate paths (up to 4)
         candidate_paths = self.get_candidate_paths(src_dpid, dst_dpid, k=4)
 
         # 0: Shortest path hops normalized
@@ -331,7 +446,6 @@ class StateManager:
                     state[1 + i] = 0.0
                     state[5 + i] = 0.04
             else:
-                # Nonexistent candidate path: penalized so agent prefers available paths
                 state[1 + i] = 1.0
                 state[5 + i] = 1.0
 
@@ -341,109 +455,12 @@ class StateManager:
 
         return state
 
-    def get_multicast_state(self, src_dpid, group_destinations):
-        """
-        Builds a normalized 50-dimensional state vector for Multicast Dueling DQN.
-        [0]: Normalized Source DPID
-        [1-5]: Up to 5 normalized Destination DPIDs
-        [6-8]: Global avg utilization, avg delay, avg loss
-        [9-47]: Flattened link features (util, delay, loss) for up to 13 topology edges
-        [48-49]: Active receiver count & total multicast load
-        """
-        state = np.zeros(50, dtype=np.float32)
-        num_nodes = max(1, self.graph.number_of_nodes())
-
-        state[0] = (src_dpid % num_nodes) / float(num_nodes)
-        for i, dst in enumerate(group_destinations[:5]):
-            state[i + 1] = (dst % num_nodes) / float(num_nodes)
-
-        # Global statistics
-        utils = list(self.link_utilization.values())
-        delays = list(self.link_delays.values())
-        losses = list(self.link_loss.values())
-
-        state[6] = float(np.mean(utils)) if utils else 0.0
-        state[7] = min(1.0, float(np.mean(delays)) / 50.0) if delays else 0.04
-        state[8] = float(np.mean(losses)) if losses else 0.0
-
-        # Sample edge features for up to 13 links
-        edges = list(self.graph.edges())
-        for i, edge in enumerate(edges[:13]):
-            idx = 9 + (i * 3)
-            state[idx] = self.link_utilization.get(edge, 0.0)
-            state[idx + 1] = min(1.0, self.link_delays.get(edge, 2.0) / 50.0)
-            state[idx + 2] = self.link_loss.get(edge, 0.0)
-
-        state[48] = min(1.0, len(group_destinations) / 10.0)
-        state[49] = min(1.0, float(np.sum(utils)) / 10.0) if utils else 0.0
-
-        return state
-
-    def update_security_window(self):
-        """Called periodically by monitor loop to compute Shannon entropy, rates, and record history."""
-        now = time.time()
-        dt = max(0.5, now - self.last_security_sample_time)
-
-        total_pkts = self.recent_packet_count
-        total_bytes = self.recent_byte_count
-
-        pps = total_pkts / dt
-        bpp = (total_bytes / max(1, total_pkts)) if total_pkts > 0 else 0.0
-
-        # Shannon Entropy
-        entropy = 0.0
-        if total_pkts > 0:
-            for count in self.src_ip_counter.values():
-                if count > 0:
-                    p = count / float(total_pkts)
-                    entropy -= p * math.log2(p)
-
-        max_possible_entropy = math.log2(max(2, len(self.src_ip_counter)))
-        normalized_entropy = min(1.0, entropy / max(1.0, max_possible_entropy)) if total_pkts > 10 else 1.0
-
-        num_flows = len(self.flow_stats)
-
-        self.cached_security_state = np.array([
-            min(1.0, pps / 5000.0),
-            normalized_entropy,
-            min(1.0, bpp / 1500.0),
-            min(1.0, num_flows / 100.0),
-            min(1.0, (pps * bpp) / 1e7)
-        ], dtype=np.float32)
-
-        # Record telemetry history for dynamic real-time dashboard charts
-        total_mbps = sum(p.get('tx_mbps', 0.0) for p in self.port_rates.values())
-        avg_lat = float(np.mean(list(self.link_delays.values()))) if self.link_delays else 2.0
-        max_u = float(np.max(list(self.link_utilization.values()))) if self.link_utilization else 0.0
-        self.telemetry_history.append({
-            'timestamp': time.strftime("%H:%M:%S", time.localtime(now)),
-            'throughput_mbps': round(float(total_mbps), 2),
-            'packet_rate_pps': round(float(pps), 1),
-            'entropy': round(float(normalized_entropy), 3),
-            'avg_latency_ms': round(float(avg_lat), 2),
-            'max_link_utilization_pct': round(float(max_u * 100.0), 1),
-            'active_flows': num_flows,
-            'is_attack': bool(normalized_entropy < 0.45 and pps > 1200)
-        })
-
-        # Reset sample window
-        self.last_security_sample_time = now
-        self.recent_packet_count = 0
-        self.recent_byte_count = 0
-        self.src_ip_counter.clear()
-
-    def get_security_state(self):
-        """Returns the latest normalized 5-dimensional security state vector."""
-        if self.recent_packet_count > 0:
-            self.update_security_window()
-        return self.cached_security_state
-
     # --------------------------------------------------------------------------
     # Interactive Simulation & Telemetry Injection
     # --------------------------------------------------------------------------
 
     def inject_traffic_flow(self, src_ip, dst_ip, src_dpid, dst_dpid, mbps=15.0, pps=1200.0, path=None):
-        """Injects a simulated flow and updates link utilization along the chosen path."""
+        """Injects a simulated flow and updates link utilization, jitter, and loss along the chosen path."""
         duration = 10.0
         bytes_count = int((mbps * 1e6 * duration) / 8.0)
         packets = int(pps * duration)
@@ -454,85 +471,57 @@ class StateManager:
                 u, v = path[i], path[i+1]
                 cap = self.link_bandwidths.get((u, v), 100.0)
                 add_util = mbps / max(1.0, cap)
-                self.link_utilization[(u, v)] = min(1.0, self.link_utilization.get((u, v), 0.0) + add_util)
+                new_u = min(1.0, self.link_utilization.get((u, v), 0.0) + add_util)
+                self.link_utilization[(u, v)] = new_u
+
+                # Update loss and jitter under new load
+                if new_u <= 0.70:
+                    loss_pct = new_u * 0.05
+                else:
+                    excess = (new_u - 0.70) / 0.30
+                    loss_pct = min(35.0, 0.05 + 30.0 * (excess ** 2.2))
+                self.link_loss[(u, v)] = float(loss_pct)
+
+                curr_delay = self.link_delays.get((u, v), 2.0)
+                self.update_link_latency(u, v, curr_delay * (1.0 + new_u))
+
                 port = self.graph[u][v].get('port', 1) if self.graph.has_edge(u, v) else 1
                 self.port_rates[(u, port)] = {
                     'rx_mbps': mbps, 'tx_mbps': mbps, 'rx_pps': pps, 'tx_pps': pps
                 }
 
-    def inject_ddos_flood(self, attacker_ip="10.0.0.4", target_ip="10.0.0.1", pps=4800, bpp=80):
-        """Injects an intense single-source volumetric flood causing entropy collapse."""
-        duration = 5.0
-        total_packets = int(pps * duration)
-        total_bytes = int(total_packets * bpp)
-        self.update_flow_stats(5, attacker_ip, target_ip, total_packets, total_bytes, duration)
-        self.active_simulation_mode = "ddos_flood"
-        self.update_security_window()
-
     def inject_core_congestion(self, utilization=0.95):
-        """Saturates core switch links to trigger lateral cross-link rerouting."""
+        """Saturates core switch links to test lateral cross-link rerouting."""
         core_edges = [(1, 2), (2, 1), (1, 3), (3, 1), (2, 4), (4, 2), (2, 5), (5, 2), (3, 6), (6, 3), (3, 7), (7, 3)]
         for u, v in core_edges:
             if (u, v) in self.link_utilization or self.graph.has_edge(u, v):
                 self.link_utilization[(u, v)] = utilization
-        # Keep lateral cross-links free
+                self.link_loss[(u, v)] = 21.5 # High packet loss under core congestion
+                self.link_jitter[(u, v)] = 12.8 # High queuing jitter
+                self.link_delays[(u, v)] = 22.0 # High queuing delay
+
+        # Keep lateral cross-links uncongested
         for u, v in [(4, 6), (6, 4), (5, 7), (7, 5)]:
             if (u, v) in self.link_utilization or self.graph.has_edge(u, v):
                 self.link_utilization[(u, v)] = 0.18
+                self.link_loss[(u, v)] = 0.01
+                self.link_jitter[(u, v)] = 0.45
+                self.link_delays[(u, v)] = 8.0
+
         self.active_simulation_mode = "core_jamming"
 
     def reset_simulation(self):
         """Resets link utilization and clears simulated telemetry."""
         for k in self.link_utilization:
             self.link_utilization[k] = 0.05
+            self.link_loss[k] = 0.0
+            self.link_jitter[k] = 0.25
         self.port_rates.clear()
         self.flow_stats.clear()
         self.raw_flow_stats.clear()
         self.raw_port_stats.clear()
         self.restore_link()
         self.active_simulation_mode = None
-        self.cached_security_state = np.array([0.0, 1.0, 0.0, 0.0, 0.0], dtype=np.float32)
-
-    def calculate_multivector_entropy(self):
-        """
-        Calculates normalized multi-vector Shannon entropy across:
-          - H_src: Source IP distribution (single-source vs distributed)
-          - H_dst: Destination IP distribution (targeted victim vs broad sweep)
-          - H_port: Destination port distribution (service targeted vs random)
-        Returns structured analysis dict.
-        """
-        def calc_h(counter):
-            total = sum(counter.values())
-            if total <= 0:
-                return 1.0
-            h = 0.0
-            for count in counter.values():
-                if count > 0:
-                    p = count / float(total)
-                    h -= p * math.log2(p)
-            max_h = math.log2(max(2, len(counter)))
-            return min(1.0, max(0.0, h / max(1.0, max_h)))
-
-        h_src = calc_h(self.src_ip_counter)
-        h_dst = calc_h(self.dst_ip_counter)
-        h_port = calc_h(self.dst_port_counter)
-
-        if h_src < 0.40 and h_dst < 0.40:
-            attack_type = "targeted_single_source"
-        elif h_src > 0.60 and h_dst < 0.40:
-            attack_type = "distributed_reflection_flood"
-        elif h_src < 0.40 and h_dst > 0.60:
-            attack_type = "scanning_or_random_sweep"
-        else:
-            attack_type = "nominal_or_diffused"
-
-        return {
-            'h_src': round(float(h_src), 3),
-            'h_dst': round(float(h_dst), 3),
-            'h_port': round(float(h_port), 3),
-            'attack_type': attack_type,
-            'is_anomalous': bool(h_src < 0.45 or h_dst < 0.45)
-        }
 
     def inject_link_failure(self, u, v):
         """Simulates physical fiber cut or port down between switch u and v."""
@@ -569,3 +558,20 @@ class StateManager:
             if not self.failed_links:
                 self.active_simulation_mode = None
         return restored
+
+    # Backward compatibility stubs for archived modules
+    def update_security_window(self):
+        """Periodic telemetry sampler."""
+        now = time.time()
+        te_summary = self.get_network_te_summary()
+        self.telemetry_history.append({
+            'timestamp': time.strftime("%H:%M:%S", time.localtime(now)),
+            'throughput_mbps': te_summary['total_throughput_mbps'],
+            'bottleneck_utilization_pct': te_summary['bottleneck_utilization_pct'],
+            'mean_utilization_pct': te_summary['mean_utilization_pct'],
+            'avg_latency_ms': te_summary['mean_latency_ms'],
+            'avg_jitter_ms': te_summary['mean_jitter_ms'],
+            'packet_loss_pct': te_summary['mean_packet_loss_pct'],
+            'active_flows': te_summary['active_flows_count'],
+            'flow_mods': te_summary['control_overhead']['flow_mod_count']
+        })

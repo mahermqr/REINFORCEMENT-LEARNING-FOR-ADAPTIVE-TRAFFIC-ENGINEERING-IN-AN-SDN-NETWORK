@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# SDN Mininet Network Traffic Generator & DDoS Attack Simulator
-# Generates realistic background unicast, multicast, and attack traffic
+# SDN Mininet Network Traffic Generator (EC499)
+# Generates realistic synthetic traffic patterns:
+#  1. Continuous background unicast flows (Mice & Elephant flows)
+#  2. Bursty Poisson traffic load surges
+#  3. Asymmetric cross-pod elephant flows to test lateral link offload
 # ==============================================================================
 
 set -e
 
 echo "======================================================================"
-echo " Starting SDN Traffic Generator"
-echo " Modes: Unicast (iperf), Multicast (iperf UDP), DDoS Flooding (iperf)"
+echo " Starting SDN Traffic Generator for Adaptive Traffic Engineering"
+echo " Modes: Unicast Background, Bursty Surges, Elephant Flows"
 echo "======================================================================"
 
-# Verify Mininet is running and has active host namespaces
 check_mininet() {
     if ! pgrep -f "mininet:" >/dev/null 2>&1; then
         echo "[!] Error: No active Mininet host processes detected." >&2
@@ -23,7 +25,6 @@ check_mininet() {
     fi
 }
 
-# Check for root or cached sudo credentials
 check_sudo() {
     if [ "$EUID" -ne 0 ]; then
         if ! sudo -n true 2>/dev/null; then
@@ -45,7 +46,6 @@ else
     SUDO_CMD=""
 fi
 
-# Helper to execute command inside a Mininet host namespace using mnexec
 mn_exec() {
     local host="$1"
     shift
@@ -61,7 +61,6 @@ mn_exec() {
     $SUDO_CMD mnexec -a "$pid" "$@"
 }
 
-# Clean up stale iperf processes on mininet hosts
 clean_stale_iperf() {
     for host in h1 h2 h3 h4 h5 h6 h7 h8; do
         local pid
@@ -72,7 +71,6 @@ clean_stale_iperf() {
     done
 }
 
-# Cleanup on script termination
 cleanup() {
     echo -e "\n[*] Stopping traffic generator and cleaning up background iperf processes..."
     clean_stale_iperf
@@ -80,62 +78,60 @@ cleanup() {
     echo "[*] Cleanup complete."
 }
 
-generate_unicast() {
-    echo "[+] Launching continuous background unicast flows..."
-    # h2 -> h1 (10 Mbps, port 5001)
-    # h3 -> h5 (15 Mbps, port 5002)
-    # h6 -> h1 (10 Mbps, port 5001)
+generate_background() {
+    echo "[+] Launching continuous background traffic (Mice flows: web/RPC)..."
     mn_exec h1 iperf -s -u -p 5001 &
     mn_exec h5 iperf -s -u -p 5002 &
+    mn_exec h7 iperf -s -u -p 5003 &
     sleep 1
-    mn_exec h2 iperf -c 10.0.0.1 -u -p 5001 -b 10M -t 300 &
-    mn_exec h3 iperf -c 10.0.0.5 -u -p 5002 -b 15M -t 300 &
-    mn_exec h6 iperf -c 10.0.0.1 -u -p 5001 -b 10M -t 300 &
-    echo "[+] Unicast background traffic initiated."
+    mn_exec h2 iperf -c 10.0.0.1 -u -p 5001 -b 5M -t 300 &
+    mn_exec h3 iperf -c 10.0.0.5 -u -p 5002 -b 8M -t 300 &
+    mn_exec h6 iperf -c 10.0.0.7 -u -p 5003 -b 5M -t 300 &
+    echo "[+] Background mice flows initiated."
 }
 
-generate_multicast() {
-    echo "[+] Launching multicast UDP stream to group 224.1.1.1 (port 5005)..."
-    mn_exec h5 iperf -s -u -B 224.1.1.1 -p 5005 &
-    mn_exec h7 iperf -s -u -B 224.1.1.1 -p 5005 &
-    mn_exec h8 iperf -s -u -B 224.1.1.1 -p 5005 &
+generate_elephant_burst() {
+    echo "[+] Launching high-bandwidth elephant flow (h4 -> h8, 45 Mbps)..."
+    mn_exec h8 iperf -s -u -p 5004 &
     sleep 1
-    mn_exec h2 iperf -c 224.1.1.1 -u -p 5005 -b 15M -t 300 &
-    echo "[+] Multicast streams initiated."
+    mn_exec h4 iperf -c 10.0.0.8 -u -p 5004 -b 45M -t 120 &
+    echo "[+] Elephant flow active across core/lateral mesh."
 }
 
-generate_ddos() {
-    echo "[!] Launching high-rate DDoS flood from attacker h4 -> target h1..."
-    mn_exec h4 iperf -c 10.0.0.1 -u -p 5001 -b 50M -t 60 &
-    echo "[!] DDoS flood active for 60 seconds."
+generate_pod_surge() {
+    echo "[+] Launching asymmetric pod surge (Pod 1 to Pod 2 cross-links)..."
+    mn_exec h1 iperf -s -u -p 5005 &
+    mn_exec h6 iperf -s -u -p 5006 &
+    sleep 1
+    mn_exec h2 iperf -c 10.0.0.6 -u -p 5006 -b 30M -t 60 &
+    mn_exec h3 iperf -c 10.0.0.1 -u -p 5005 -b 25M -t 60 &
+    echo "[+] Pod surge active."
 }
 
-# 1. Pre-flight checks
 check_mininet
 check_sudo
 
-# 2. Setup trap and clean existing instances
 trap cleanup EXIT INT TERM
 clean_stale_iperf
 
-# 3. Dispatch requested traffic mode
 case "$1" in
-    unicast)
-        generate_unicast
+    background)
+        generate_background
         ;;
-    multicast)
-        generate_multicast
+    elephant)
+        generate_elephant_burst
         ;;
-    ddos)
-        generate_ddos
+    surge)
+        generate_pod_surge
         ;;
     all|*)
-        generate_unicast
-        generate_multicast
+        generate_background
+        sleep 3
+        generate_elephant_burst
         sleep 5
-        generate_ddos
+        generate_pod_surge
         ;;
 esac
 
-echo "[*] Traffic generation running. Press Ctrl+C to terminate background jobs."
+echo "[*] Traffic generation active. Press Ctrl+C to stop."
 wait

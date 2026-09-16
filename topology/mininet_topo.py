@@ -5,9 +5,8 @@ Features:
   - Multi-Topology Support:
       1. Hierarchical Tree Topology (7 switches, 8 hosts, redundant mesh links)
       2. Fat-Tree Topology (k=4: 4 Core, 8 Aggregation, 8 Edge switches, 16 hosts)
-  - Adaptive background unicast traffic generator (iperf)
-  - Multicast streaming simulation (UDP multicast group 224.1.1.1)
-  - High-rate DDoS flooding attack simulation (iperf UDP flood)
+  - Adaptive background unicast traffic generator (iperf mice flows)
+  - Bursty elephant flows to stress-test core link utilization and adaptive rerouting
 """
 
 from mininet.net import Mininet
@@ -52,12 +51,12 @@ class TreeTopology(Topo):
         self.addLink(s4, s6, bw=30, delay='8ms')
         self.addLink(s5, s7, bw=30, delay='8ms')
 
-        # Hosts attached to edge switches
+        # Hosts attached to edge switches (2 hosts per edge switch)
         info("*** Creating Hosts and Host Links\n")
         h1 = self.addHost('h1', ip='10.0.0.1/24', mac='00:00:00:00:00:01')
         h2 = self.addHost('h2', ip='10.0.0.2/24', mac='00:00:00:00:00:02')
         h3 = self.addHost('h3', ip='10.0.0.3/24', mac='00:00:00:00:00:03')
-        h4 = self.addHost('h4', ip='10.0.0.4/24', mac='00:00:00:00:00:04') # Attacker host
+        h4 = self.addHost('h4', ip='10.0.0.4/24', mac='00:00:00:00:00:04')
         h5 = self.addHost('h5', ip='10.0.0.5/24', mac='00:00:00:00:00:05')
         h6 = self.addHost('h6', ip='10.0.0.6/24', mac='00:00:00:00:00:06')
         h7 = self.addHost('h7', ip='10.0.0.7/24', mac='00:00:00:00:00:07')
@@ -75,54 +74,60 @@ class TreeTopology(Topo):
 
 class FatTreeTopology(Topo):
     """
-    Fat-Tree Topology (k=4):
-      - 4 Core switches
-      - 4 Pods (each with 2 Aggregation and 2 Edge switches)
-      - 16 End hosts
+    Standard Fat-Tree Topology (k=4):
+    - 4 Core Switches (c1..c4)
+    - 4 Pods, each with 2 Aggregation (a1..a8) and 2 Edge (e1..e8) switches
+    - 16 End Hosts (h1..h16)
     """
     def build(self, k=4):
-        info("*** Creating Fat-Tree (k=4) Switches and Links\n")
-        cores = []
-        for i in range(1, (k//2)**2 + 1):
-            cores.append(self.addSwitch(f'c{i}', dpid=f'000000000000010{i}'))
+        num_cores = (k // 2) ** 2
+        num_pods = k
+        num_aggr_per_pod = k // 2
+        num_edge_per_pod = k // 2
+        num_hosts_per_edge = k // 2
 
-        agg_switches = []
-        edge_switches = []
+        core_switches = []
+        for i in range(1, num_cores + 1):
+            dpid = f"{i:016x}"
+            sw = self.addSwitch(f'c{i}', dpid=dpid)
+            core_switches.append(sw)
+
         host_id = 1
+        dpid_counter = 100
+        for pod in range(num_pods):
+            aggr_switches = []
+            edge_switches = []
 
-        for pod in range(k):
-            pod_aggs = []
-            pod_edges = []
-            for a in range(k//2):
-                sw_num = pod * 2 + a + 1
-                pod_aggs.append(self.addSwitch(f'a{sw_num}', dpid=f'000000000000020{sw_num}'))
-            for e in range(k//2):
-                sw_num = pod * 2 + e + 1
-                pod_edges.append(self.addSwitch(f'e{sw_num}', dpid=f'000000000000030{sw_num}'))
+            for a in range(num_aggr_per_pod):
+                dpid_counter += 1
+                sw = self.addSwitch(f'a{pod}_{a}', dpid=f"{dpid_counter:016x}")
+                aggr_switches.append(sw)
 
-            # Connect Agg to Edge within Pod
-            for agg in pod_aggs:
-                for edge in pod_edges:
-                    self.addLink(agg, edge, bw=100, delay='2ms')
+            for e in range(num_edge_per_pod):
+                dpid_counter += 1
+                sw = self.addSwitch(f'e{pod}_{e}', dpid=f"{dpid_counter:016x}")
+                edge_switches.append(sw)
 
-            # Connect Core to Agg
-            for i, agg in enumerate(pod_aggs):
-                for j in range(k//2):
-                    core_idx = i * (k//2) + j
-                    self.addLink(cores[core_idx], agg, bw=100, delay='1ms')
+            for e_idx, e_sw in enumerate(edge_switches):
+                for a_sw in aggr_switches:
+                    self.addLink(e_sw, a_sw, bw=50, delay='2ms')
 
-            # Add hosts to Edge switches
-            for edge in pod_edges:
-                for h_idx in range(k//2):
-                    host = self.addHost(f'h{host_id}', ip=f'10.0.{pod+1}.{host_id}/24',
-                                        mac=f'00:00:00:00:00:{host_id:02x}')
-                    self.addLink(host, edge, bw=100, delay='1ms')
+                for h in range(num_hosts_per_edge):
+                    host_ip = f"10.{pod}.{e_idx}.{h+2}/24"
+                    host_mac = f"00:00:00:{pod:02x}:{e_idx:02x}:{h+2:02x}"
+                    host = self.addHost(f'h{host_id}', ip=host_ip, mac=host_mac)
+                    self.addLink(host, e_sw, bw=100, delay='1ms')
                     host_id += 1
+
+            for a_idx, a_sw in enumerate(aggr_switches):
+                for c in range(k // 2):
+                    core_idx = a_idx * (k // 2) + c
+                    self.addLink(a_sw, core_switches[core_idx], bw=100, delay='2ms')
 
 
 def start_unicast_traffic(net):
-    """Generates normal background unicast traffic."""
-    info("\n[Traffic] Starting Background Unicast Traffic (iperf streams)...\n")
+    """Generates continuous background unicast mice flows (HTTP/RPC traffic)."""
+    info("\n[Traffic] Starting Background Mice Flows (Web/RPC lightweight streams)...\n")
     try:
         h1 = net.get('h1')
         h2 = net.get('h2')
@@ -133,43 +138,28 @@ def start_unicast_traffic(net):
         h1.cmd('iperf -s -u -p 5001 &')
         h5.cmd('iperf -s -u -p 5002 &')
 
-        h2.cmd('iperf -c %s -u -p 5001 -b 15M -t 35 &' % h1.IP())
-        h3.cmd('iperf -c %s -u -p 5002 -b 10M -t 35 &' % h5.IP())
-        h6.cmd('iperf -c %s -u -p 5001 -b 8M -t 35 &' % h1.IP())
-        info("[Traffic] Background unicast streams active.\n")
+        h2.cmd('iperf -c %s -u -p 5001 -b 15M -t 45 &' % h1.IP())
+        h3.cmd('iperf -c %s -u -p 5002 -b 10M -t 45 &' % h5.IP())
+        h6.cmd('iperf -c %s -u -p 5001 -b 8M -t 45 &' % h1.IP())
+        info("[Traffic] Background mice flows active.\n")
     except Exception as e:
-        info(f"[Traffic] Unicast generation: {e}\n")
+        info(f"[Traffic] Background traffic error: {e}\n")
 
 
-def start_multicast_traffic(net):
-    """Generates multicast traffic stream to group 224.1.1.1."""
-    info("\n[Traffic] Starting Multicast Streaming to group 224.1.1.1...\n")
+def start_elephant_flows(net):
+    """Generates high-bandwidth bursty elephant flows to induce core link congestion."""
+    info("\n[Traffic] Starting Bursty Elephant Flows (Heavy cross-pod transfers)...\n")
     try:
-        h2 = net.get('h2')
-        h5 = net.get('h5')
-        h7 = net.get('h7')
+        h4 = net.get('h4')
         h8 = net.get('h8')
 
-        h5.cmd('iperf -s -u -B 224.1.1.1 -p 5005 &')
-        h7.cmd('iperf -s -u -B 224.1.1.1 -p 5005 &')
-        h8.cmd('iperf -s -u -B 224.1.1.1 -p 5005 &')
-
-        h2.cmd('iperf -c 224.1.1.1 -u -p 5005 -b 12M -t 30 &')
-        info("[Traffic] Multicast stream transmitting to {h5, h7, h8}.\n")
+        h8.cmd('iperf -s -u -p 5004 &')
+        time.sleep(1)
+        # High-rate burst to saturate primary core link and trigger DQN rerouting
+        h4.cmd('iperf -c %s -u -p 5004 -b 45M -t 35 &' % h8.IP())
+        info("[Traffic] Elephant flow active (h4 -> h8 @ 45 Mbps).\n")
     except Exception as e:
-        info(f"[Traffic] Multicast generation: {e}\n")
-
-
-def simulate_ddos_attack(net):
-    """Simulates a high-rate DDoS flood from attacker host h4 towards target h1."""
-    info("\n[Security] Launching Simulated DDoS Flooding Attack from h4 -> h1...\n")
-    try:
-        attacker = net.get('h4')
-        target = net.get('h1')
-        attacker.cmd('iperf -c %s -u -p 5001 -b 80M -t 25 &' % target.IP())
-        info("[Security] DDoS Flooding attack active (80 Mbps UDP flood).\n")
-    except Exception as e:
-        info(f"[Security] DDoS simulation: {e}\n")
+        info(f"[Traffic] Elephant flow error: {e}\n")
 
 
 def run_network(topo_choice='tree'):
@@ -202,16 +192,13 @@ def run_network(topo_choice='tree'):
     except Exception:
         pass
 
-    # Launch Traffic Scenarios in background threads
+    # Launch Synthetic Traffic Scenarios in background threads
     t1 = threading.Thread(target=start_unicast_traffic, args=(net,))
-    t2 = threading.Thread(target=start_multicast_traffic, args=(net,))
-    t3 = threading.Thread(target=simulate_ddos_attack, args=(net,))
+    t2 = threading.Thread(target=start_elephant_flows, args=(net,))
 
     t1.start()
-    time.sleep(2)
-    t2.start()
     time.sleep(3)
-    t3.start()
+    t2.start()
 
     info("\n*** Dropping into interactive Mininet CLI. Type 'exit' to stop.\n")
     CLI(net)

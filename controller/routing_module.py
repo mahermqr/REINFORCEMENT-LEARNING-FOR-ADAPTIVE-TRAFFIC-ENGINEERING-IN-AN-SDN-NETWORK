@@ -1,5 +1,6 @@
 import sys
 import os
+import time
 import numpy as np
 
 # Add agent and controller to path
@@ -10,9 +11,9 @@ from ryu.lib.packet import ethernet, ipv4, ether_types
 
 class RoutingModule:
     """
-    Adaptive Unicast Routing Engine powered by Deep Q-Network (Double DQN).
-    Dynamically routes traffic across multi-hop paths to balance link loads,
-    minimize latency, and prevent network congestion.
+    Adaptive Unicast Routing Engine powered by Deep Q-Network (Double DQN) for SDN Traffic Engineering (EC499).
+    Dynamically routes traffic across multi-hop paths to maximize throughput, balance link loads,
+    minimize latency, reduce jitter, and prevent packet loss.
     """
     def __init__(self, controller, state_manager):
         self.controller = controller
@@ -68,8 +69,11 @@ class RoutingModule:
             return
 
         # Case 2: Multi-hop routing across SDN fabric
+        t0 = time.time()
         state = self.state_manager.get_routing_state(dpid, dst_dpid)
         action = self.agent.act(state, explore=True)
+        decision_time_ms = (time.time() - t0) * 1000.0
+        self.state_manager.record_decision_latency(decision_time_ms)
 
         # Discover diversity-aware candidate paths using StateManager
         candidate_paths = self.state_manager.get_candidate_paths(dpid, dst_dpid, k=4)
@@ -81,7 +85,7 @@ class RoutingModule:
         # Action selects from candidate paths (modulo candidate count)
         selected_path = candidate_paths[action % len(candidate_paths)]
 
-        # Calculate real reward based on path hops, latency, and bottleneck utilization
+        # Calculate reward based on path hops, latency, jitter, loss, and utilization
         reward = self._calculate_reward(selected_path)
 
         # Experience Replay Training: record transition (s, a, r, s')
@@ -95,8 +99,8 @@ class RoutingModule:
 
         self.prev_experience[exp_key] = (state, action)
 
-        self.logger.info("[RoutingModule] Routing %s -> %s via path: %s | Action: %d | Reward: %.2f",
-                         src_ip or src_mac, dst_ip or dst_mac, selected_path, action, reward)
+        self.logger.info("[RoutingModule] Routing %s -> %s via path: %s | Action: %d | Decision: %.2f ms | Reward: %.2f",
+                         src_ip or src_mac, dst_ip or dst_mac, selected_path, action, decision_time_ms, reward)
 
         # Install OpenFlow 1.3 flow rules along the entire path
         self._install_path(selected_path, dst_port, eth_dst=dst_mac, ip_src=src_ip, ip_dst=dst_ip)
@@ -111,19 +115,26 @@ class RoutingModule:
 
     def _calculate_reward(self, path):
         """
-        Computes composite reward function:
-        Penalizes hops, latency, and applies steep asymptotic penalty for high utilization (> 70%).
+        Formulates composite reward function based on Proposal Objectives 3 & 4:
+        Maximizes throughput and link fairness, while penalizing latency, jitter, packet loss, and peak load.
         """
         hops = len(path) - 1
         total_delay = 0.0
         max_util = 0.0
+        total_jitter = 0.0
+        max_loss = 0.0
 
         for i in range(len(path) - 1):
             edge = (path[i], path[i+1])
             delay = self.state_manager.link_delays.get(edge, 2.0)
             util = self.state_manager.link_utilization.get(edge, 0.0)
+            jitter = self.state_manager.link_jitter.get(edge, 0.25)
+            loss = self.state_manager.link_loss.get(edge, 0.0)
+
             total_delay += delay
             max_util = max(max_util, util)
+            total_jitter += jitter
+            max_loss = max(max_loss, loss)
 
         # Asymptotic barrier penalty when bottleneck utilization exceeds 70%
         if max_util > 0.70:
@@ -131,7 +142,7 @@ class RoutingModule:
         else:
             congestion_penalty = 1.5 * max_util
 
-        reward = - (0.3 * hops + 0.05 * total_delay + congestion_penalty)
+        reward = - (0.35 * hops + 0.06 * total_delay + congestion_penalty + 0.25 * total_jitter + 0.5 * max_loss)
         return float(reward)
 
     def _install_path(self, path, final_port, eth_dst, ip_src=None, ip_dst=None):
@@ -194,7 +205,7 @@ class RoutingModule:
     def install_wcmp_multipath(self, candidate_paths, final_port, eth_dst, ip_src=None, ip_dst=None, group_id=500):
         """
         Installs an OpenFlow 1.3 OFPGT_SELECT Group on the ingress switch,
-        distributing elephant flows across multiple paths according to WCMP weights.
+        distributing flows across multiple paths according to WCMP weights.
         """
         if not candidate_paths:
             return False

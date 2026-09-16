@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Dynamic Zero-Shot Blind Evaluation on Random Unseen Topologies
-Evaluates the pre-trained Double DQN Router and Dueling DQN Multicast Agent
-on dynamically generated, arbitrary random topologies without retraining.
+Dynamic Zero-Shot Blind Evaluation on Random Unseen Topologies (EC499).
+Evaluates the pre-trained Double DQN Router on dynamically generated, arbitrary random topologies without retraining.
+Evaluates: Core Jamming Relief, Avalanche Decisions/sec, Latency Degradation, and Jitter/Loss Resilience.
 """
 
 import os
@@ -20,13 +20,13 @@ sys.path.append(os.path.join(BASE_DIR, 'controller'))
 sys.path.append(os.path.join(BASE_DIR, 'topology'))
 
 from dqn_router import DQNRoutingAgent
-from dqn_multicast import DQNMulticastAgent
 from state_manager import StateManager
 from topology_library import build_random_topology
+from traditional_routing import dijkstra_spf, compute_path_metrics
 
 def evaluate_random_blind_topology(num_nodes=20, seed=None, num_flows=200):
     print("=" * 85)
-    print(" 🎲 ZERO-SHOT BLIND EVALUATION ON DYNAMICALLY GENERATED RANDOM TOPOLOGY")
+    print(" 🎲 ZERO-SHOT BLIND EVALUATION ON DYNAMICALLY GENERATED RANDOM TOPOLOGY (EC499)")
     print("=" * 85)
 
     # 1. Load trained agent checkpoints
@@ -35,15 +35,8 @@ def evaluate_random_blind_topology(num_nodes=20, seed=None, num_flows=200):
     if not router_agent.load(router_ckpt):
         print(f"[Error] Failed to load router weights from {router_ckpt}")
         return
-    router_agent.epsilon = 0.0 # Strict greedy inference (zero exploration)
+    router_agent.epsilon = 0.0 # Strict greedy inference
     print(f"[Init] Loaded trained Double DQN Router checkpoint from models/dqn_router.pth")
-
-    multicast_agent = DQNMulticastAgent(state_size=50, action_size=10)
-    m_ckpt = os.path.join(BASE_DIR, 'models', 'dqn_multicast.pth')
-    if os.path.exists(m_ckpt):
-        multicast_agent.load(m_ckpt)
-        multicast_agent.epsilon = 0.0
-        print(f"[Init] Loaded trained Dueling DQN Multicast checkpoint from models/dqn_multicast.pth")
 
     # 2. Build completely unseen random connected topology
     graph, meta = build_random_topology(num_nodes=num_nodes, p_edge=0.30, seed=seed)
@@ -62,90 +55,87 @@ def evaluate_random_blind_topology(num_nodes=20, seed=None, num_flows=200):
     sm = StateManager()
     sm.graph = graph.copy()
     for u, v, d in graph.edges(data=True):
-        sm.update_link(u, v, src_port=1, dst_port=1, capacity_mbps=d['capacity'], delay_ms=d['delay'])
+        sm.update_link(u, v, src_port=1, dst_port=1, capacity_mbps=d.get('capacity', 100.0), delay_ms=d.get('delay', 2.0))
 
     core_nodes = meta['core_nodes']
     edge_nodes = meta['edge_nodes']
 
-    # Helper to evaluate flow
-    topo_path_cache = {}
-    def evaluate_flow(src, dst):
-        if (src, dst) not in topo_path_cache:
-            try:
-                topo_path_cache[(src, dst)] = list(itertools.islice(nx.shortest_simple_paths(sm.graph, src, dst), 4))
-            except Exception:
-                topo_path_cache[(src, dst)] = [[src, dst]]
-        candidate_paths = topo_path_cache[(src, dst)]
-
-        spf_path = candidate_paths[0]
-        state = sm.get_routing_state(src, dst)
-        action = router_agent.act(state, explore=False)
-        chosen_path = candidate_paths[action % len(candidate_paths)]
-
-        def p_metrics(p):
-            lat = sum(sm.link_delays.get((p[i], p[i+1]), 2.0) for i in range(len(p)-1))
-            util = max(sm.link_utilization.get((p[i], p[i+1]), 0.0) for i in range(len(p)-1))
-            return util, lat
-
-        du, dl = p_metrics(chosen_path)
-        su, sl = p_metrics(spf_path)
-        rerouted = (chosen_path != spf_path)
-        return du, su, dl, sl, rerouted, chosen_path, spf_path
-
     # -------------------------------------------------------------------------
-    # TEST 1: Core Jamming Stress on Random Fabric
+    # TEST 1: Core Jamming & Lateral Path Offloading
     # -------------------------------------------------------------------------
     print("\n" + "-" * 85)
-    print(f" [TEST 1/4] RANDOM CORE JAMMING (Core nodes: {core_nodes} saturated to 85% - 98%)")
+    print(f" [TEST 1/4] CORE JAMMING RESILIENCE ({num_flows} Flows Across Random Topology)")
     print("-" * 85)
     for u, v in sm.graph.edges():
         if u in core_nodes or v in core_nodes:
             sm.link_utilization[(u, v)] = random.uniform(0.85, 0.98)
         else:
-            sm.link_utilization[(u, v)] = random.uniform(0.10, 0.28)
+            sm.link_utilization[(u, v)] = random.uniform(0.10, 0.30)
 
-    t1_dqn_u, t1_spf_u, t1_dqn_l, t1_spf_l, reroutes = [], [], [], [], 0
+    offloaded_count = 0
+    dqn_bottlenecks, spf_bottlenecks = [], []
+    dqn_latencies, spf_latencies = [], []
+
+    def evaluate_flow(src, dst):
+        cand_paths = sm.get_candidate_paths(src, dst, k=4)
+        spf_p = dijkstra_spf(sm.graph, src, dst)
+
+        st = sm.get_routing_state(src, dst)
+        act = router_agent.act(st, explore=False)
+        dqn_p = cand_paths[act % len(cand_paths)]
+
+        m_dqn = compute_path_metrics(dqn_p, sm.link_utilization, sm.link_delays, sm.link_bandwidths)
+        m_spf = compute_path_metrics(spf_p, sm.link_utilization, sm.link_delays, sm.link_bandwidths)
+
+        is_offload = (dqn_p != spf_p) and (m_dqn['bottleneck_util'] < m_spf['bottleneck_util'])
+        return is_offload, m_dqn['bottleneck_util'], m_spf['bottleneck_util'], m_dqn['total_delay'], m_spf['total_delay'], m_dqn['jitter'], m_dqn['packet_loss']
+
     for _ in range(num_flows):
         src = random.choice(edge_nodes)
         dst = random.choice([n for n in edge_nodes if n != src])
-        du, su, dl, sl, rerouted, _, _ = evaluate_flow(src, dst)
-        t1_dqn_u.append(du * 100.0)
-        t1_spf_u.append(su * 100.0)
-        t1_dqn_l.append(dl)
-        t1_spf_l.append(sl)
-        if rerouted:
-            reroutes += 1
+        off, db, sb, dl, sl, _, _ = evaluate_flow(src, dst)
+        if off:
+            offloaded_count += 1
+        dqn_bottlenecks.append(db)
+        spf_bottlenecks.append(sb)
+        dqn_latencies.append(dl)
+        spf_latencies.append(sl)
 
-    t1_relief = np.mean(t1_spf_u) - np.mean(t1_dqn_u)
-    print(f" • Evaluated Random Ingress/Egress Flows: {num_flows}")
-    print(f" • Dijkstra SPF Bottleneck Load:         {np.mean(t1_spf_u):.2f}%")
-    print(f" • Double DQN Bottleneck Load:           {np.mean(t1_dqn_u):.2f}%")
-    print(f" • Congestion Reduction:                 +{t1_relief:.2f}% improvement!")
-    print(f" • Autonomous Offload Rate:              {(reroutes / num_flows) * 100.0:.1f}% diverted to uncongested paths")
-    print(f" • Mean Latency:                         DQN: {np.mean(t1_dqn_l):.2f} ms vs SPF: {np.mean(t1_spf_l):.2f} ms")
+    mean_dqn_b = np.mean(dqn_bottlenecks) * 100.0
+    mean_spf_b = np.mean(spf_bottlenecks) * 100.0
+    offload_rate = (offloaded_count / float(num_flows)) * 100.0
+    congestion_relief = mean_spf_b - mean_dqn_b
+
+    print(f" • Evaluated Flows:                      {num_flows}")
+    print(f" • Double DQN Mean Bottleneck Load:      {mean_dqn_b:.2f}%")
+    print(f" • Dijkstra SPF Mean Bottleneck Load:    {mean_spf_b:.2f}%")
+    print(f" • Congestion Relief:                    +{congestion_relief:.2f}% net load reduction")
+    print(f" • Autonomous Offload Rate:              {offload_rate:.1f}% of flows steered away from core jam")
 
     # -------------------------------------------------------------------------
-    # TEST 2: High-Concurrency Burst (Jain's Fairness)
+    # TEST 2: High-Concurrency Burst (500 Flows)
     # -------------------------------------------------------------------------
     print("\n" + "-" * 85)
-    print(f" [TEST 2/4] HIGH-CONCURRENCY FLOW AVALANCHE (500 Concurrent Requests)")
+    print(f" [TEST 2/4] HIGH-CONCURRENCY DECISION AVALANCHE (500 Simultaneous Ingress Flows)")
     print("-" * 85)
-    link_loads_dqn = {e: 0.05 for e in sm.graph.edges()}
-    link_loads_spf = {e: 0.05 for e in sm.graph.edges()}
-
+    burst_flows = [(random.choice(edge_nodes), random.choice([n for n in edge_nodes if n != s])) for s in [random.choice(edge_nodes) for _ in range(500)]]
     t0 = time.time()
-    for _ in range(500):
-        src = random.choice(edge_nodes)
-        dst = random.choice([n for n in edge_nodes if n != src])
-        _, _, _, _, _, dqn_p, spf_p = evaluate_flow(src, dst)
-        for i in range(len(dqn_p) - 1):
-            e = (dqn_p[i], dqn_p[i+1])
-            if e in link_loads_dqn:
-                link_loads_dqn[e] = min(1.0, link_loads_dqn[e] + 0.012)
-        for i in range(len(spf_p) - 1):
-            e = (spf_p[i], spf_p[i+1])
-            if e in link_loads_spf:
-                link_loads_spf[e] = min(1.0, link_loads_spf[e] + 0.012)
+    link_loads_dqn = {e: 0 for e in sm.graph.edges()}
+    link_loads_spf = {e: 0 for e in sm.graph.edges()}
+
+    for s, d in burst_flows:
+        cands = sm.get_candidate_paths(s, d, k=4)
+        st = sm.get_routing_state(s, d)
+        act = router_agent.act(st, explore=False)
+        p_dqn = cands[act % len(cands)]
+        p_spf = dijkstra_spf(sm.graph, s, d)
+        for i in range(len(p_dqn)-1):
+            if (p_dqn[i], p_dqn[i+1]) in link_loads_dqn:
+                link_loads_dqn[(p_dqn[i], p_dqn[i+1])] += 1
+        for i in range(len(p_spf)-1):
+            if (p_spf[i], p_spf[i+1]) in link_loads_spf:
+                link_loads_spf[(p_spf[i], p_spf[i+1])] += 1
+
     burst_time_ms = (time.time() - t0) * 1000.0
     decisions_per_sec = 500.0 / max(0.001, (burst_time_ms / 1000.0))
 
@@ -160,7 +150,6 @@ def evaluate_random_blind_topology(num_nodes=20, seed=None, num_flows=200):
     print(f" • Processed Burst:                      500 concurrent flows in {burst_time_ms:.1f} ms")
     print(f" • Controller Decision Throughput:       {decisions_per_sec:.1f} decisions/second")
     print(f" • Jain's Fairness Index:                DQN: {j_dqn:.4f} vs SPF: {j_spf:.4f}")
-    print(f" • Max Link Load:                        DQN: {max(link_loads_dqn.values())*100:.1f}% vs SPF: {max(link_loads_spf.values())*100:.1f}%")
 
     # -------------------------------------------------------------------------
     # TEST 3: Dynamic Latency Degradation
@@ -180,7 +169,7 @@ def evaluate_random_blind_topology(num_nodes=20, seed=None, num_flows=200):
     for _ in range(150):
         src = random.choice(edge_nodes)
         dst = random.choice([n for n in edge_nodes if n != src])
-        _, _, dl, sl, _, _, _ = evaluate_flow(src, dst)
+        _, _, _, dl, sl, _, _ = evaluate_flow(src, dst)
         t3_dqn_l.append(dl)
         t3_spf_l.append(sl)
 
@@ -190,29 +179,27 @@ def evaluate_random_blind_topology(num_nodes=20, seed=None, num_flows=200):
     print(f" • End-to-End Latency Improvement:       +{t3_savings:.2f} ms (Faster via low-delay bypass!)")
 
     # -------------------------------------------------------------------------
-    # TEST 4: Multicast Tree Replication Efficiency
+    # TEST 4: Network Jitter & Packet Loss Resilience (RFC 3393)
     # -------------------------------------------------------------------------
     print("\n" + "-" * 85)
-    print(f" [TEST 4/4] MULTICAST REPLICATION EFFICIENCY (Steiner Tree on Random Fabric)")
+    print(f" [TEST 4/4] JITTER & PACKET LOSS RESILIENCE (RFC 3393 / RFC 3550)")
     print("-" * 85)
-    m_savings = []
-    for _ in range(25):
-        m_src = random.choice(edge_nodes)
-        m_dests = random.sample([n for n in edge_nodes if n != m_src], min(3, len(edge_nodes) - 1))
-        m_state = sm.get_multicast_state(m_src, m_dests)
-        m_action = multicast_agent.act(m_state, explore=False)
+    t4_dqn_j, t4_spf_j = [], []
+    t4_dqn_loss, t4_spf_loss = [], []
+    for _ in range(150):
+        src = random.choice(edge_nodes)
+        dst = random.choice([n for n in edge_nodes if n != src])
+        _, _, _, _, _, dj, dloss = evaluate_flow(src, dst)
+        cand_paths = sm.get_candidate_paths(src, dst, k=4)
+        spf_p = dijkstra_spf(sm.graph, src, dst)
+        m_spf = compute_path_metrics(spf_p, sm.link_utilization, sm.link_delays, sm.link_bandwidths)
+        t4_dqn_j.append(dj)
+        t4_spf_j.append(m_spf['jitter'])
+        t4_dqn_loss.append(dloss)
+        t4_spf_loss.append(m_spf['packet_loss'])
 
-        weighted_g = sm.graph.copy().to_undirected()
-        for u, v in weighted_g.edges():
-            weighted_g[u][v]['weight'] = 1.0 + (m_action % 3) * sm.link_delays.get((u, v), 2.0)
-
-        tree = nx.algorithms.approximation.steinertree.steiner_tree(weighted_g, [m_src] + m_dests, weight='weight')
-        tree_edges = tree.number_of_edges()
-        unicast_edges = len(m_dests) * 3
-        bw_saved = max(0.0, (unicast_edges - tree_edges) * 10.0)
-        m_savings.append(bw_saved)
-
-    print(f" • Multicast Conserved Bandwidth:        {np.mean(m_savings):.1f} Mbps average")
+    print(f" • Double DQN Mean Jitter:               {np.mean(t4_dqn_j):.2f} ms (vs SPF: {np.mean(t4_spf_j):.2f} ms)")
+    print(f" • Double DQN Mean Packet Loss:          {np.mean(t4_dqn_loss):.2f}% (vs SPF: {np.mean(t4_spf_loss):.2f}%)")
     print("=" * 85)
     print(f" ✅ ZERO-SHOT BLIND TRANSFER TEST PASSED ON UNSEEN {n_nodes}-NODE RANDOM TOPOLOGY!")
     print("=" * 85)

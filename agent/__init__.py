@@ -1,5 +1,5 @@
 """
-Intelligence Layer: Pure PyTorch Reinforcement Learning Agents
+Intelligence Layer: Pure PyTorch Reinforcement Learning Agents for SDN Traffic Engineering (EC499).
 """
 
 import sys
@@ -10,13 +10,9 @@ if _pkg_dir not in sys.path:
     sys.path.insert(0, _pkg_dir)
 
 from .dqn_router import DQNRoutingAgent
-from .dqn_multicast import DQNMulticastAgent
-from .ddpg_security import DDPGSecurityAgent
 from .prioritized_replay import PrioritizedReplayBuffer
 
 __all__ = [
     'DQNRoutingAgent',
-    'DQNMulticastAgent',
-    'DDPGSecurityAgent',
     'PrioritizedReplayBuffer'
 ]

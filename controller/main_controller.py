@@ -18,17 +18,13 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'agent'))
 
 from state_manager import StateManager
 from routing_module import RoutingModule
-from multicast_module import MulticastModule
-from security_module import SecurityModule
 from web_dashboard import DashboardServer
 
 class MainController(app_manager.RyuApp):
     """
-    Main OpenFlow 1.3 SDN Controller for Adaptive Multi-Agent Traffic Engineering.
-    Dispatches traffic events to:
-      1. SecurityModule (DDPG Continuous Control DDoS Mitigation)
-      2. MulticastModule (Dueling DQN Group Tree Optimization)
-      3. RoutingModule (Double DQN Adaptive Unicast Routing)
+    Main OpenFlow 1.3 SDN Controller for Adaptive Traffic Engineering (EC499).
+    Integrates Deep Q-Network (Double DQN) dynamic routing, real-time OpenFlow telemetry polling,
+    intelligent host tracking, and control overhead monitoring.
     """
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
 
@@ -37,17 +33,15 @@ class MainController(app_manager.RyuApp):
         self.datapaths = {}
         self.state_manager = StateManager()
 
-        # Initialize submodules
-        self.security_module = SecurityModule(self, self.state_manager)
-        self.multicast_module = MulticastModule(self, self.state_manager)
+        # Initialize Adaptive Traffic Engineering Routing Module
         self.routing_module = RoutingModule(self, self.state_manager)
 
         # Initialize Live Web Dashboard & REST Server (port 8080)
         self.dashboard_server = DashboardServer(self, self.state_manager, port=8080)
 
-        self.logger.info("=" * 60)
-        self.logger.info("MainController Initialized with Multi-Agent RL Submodules")
-        self.logger.info("=" * 60)
+        self.logger.info("=" * 65)
+        self.logger.info("MainController Initialized: Adaptive SDN Traffic Engineering (EC499)")
+        self.logger.info("=" * 65)
 
         # Start periodic telemetry polling thread (every 3 seconds)
         self.monitor_thread = hub.spawn(self._monitor_loop)
@@ -73,42 +67,39 @@ class MainController(app_manager.RyuApp):
                 self._request_stats(dp)
                 self._send_echo_request(dp)
 
-            # Evaluate DDPG security detection on active network telemetry
-            try:
-                self.security_module.check_active_flows()
-            except Exception:
-                pass
-
             hub.sleep(3)
 
     def _request_stats(self, datapath):
-        """Sends OFPFlowStatsRequest and OFPPortStatsRequest."""
+        """Sends OFPFlowStatsRequest and OFPPortStatsRequest, accounting for control overhead."""
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
 
         # Flow stats request
         req_flow = parser.OFPFlowStatsRequest(datapath)
         datapath.send_msg(req_flow)
+        self.state_manager.record_stats_request(byte_size=56)
 
         # Port stats request
         req_port = parser.OFPPortStatsRequest(datapath, 0, ofproto.OFPP_ANY)
         datapath.send_msg(req_port)
+        self.state_manager.record_stats_request(byte_size=56)
 
     def _send_echo_request(self, datapath):
-        """Sends EchoRequest with timestamp to measure controller-switch RTT latency."""
+        """Sends EchoRequest with timestamp to measure controller-switch RTT latency and link jitter."""
         parser = datapath.ofproto_parser
         data = f"{time.time():.6f}".encode('ascii')
         echo_req = parser.OFPEchoRequest(datapath, data=data)
         datapath.send_msg(echo_req)
+        self.state_manager.record_stats_request(byte_size=32)
 
     @set_ev_cls(ofp_event.EventOFPEchoReply, [MAIN_DISPATCHER, CONFIG_DISPATCHER])
     def echo_reply_handler(self, ev):
-        """Measures RTT from EchoReply."""
+        """Measures RTT from EchoReply and updates link latency and jitter."""
         try:
             sent_time = float(ev.msg.data.decode('ascii'))
             rtt_ms = (time.time() - sent_time) * 1000.0
-            # Update switch node latency estimation in state manager
             dpid = ev.msg.datapath.id
+            self.state_manager.record_stats_reply(byte_size=32)
             for neighbor in self.state_manager.graph.neighbors(dpid):
                 self.state_manager.update_link_latency(dpid, neighbor, delay_ms=max(0.5, rtt_ms / 2.0))
         except Exception:
@@ -128,7 +119,7 @@ class MainController(app_manager.RyuApp):
         self.logger.info("[MainController] Switch connected: DPID %016x (Table-miss flow installed)", datapath.id)
 
     def add_flow(self, datapath, priority, match, actions, buffer_id=None, idle_timeout=0, hard_timeout=0):
-        """Helper to install flow entries on an OpenFlow switch."""
+        """Helper to install flow entries on an OpenFlow switch with control overhead accounting."""
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
 
@@ -143,6 +134,7 @@ class MainController(app_manager.RyuApp):
                                     match=match, instructions=inst,
                                     idle_timeout=idle_timeout, hard_timeout=hard_timeout)
         datapath.send_msg(mod)
+        self.state_manager.record_flow_mod(byte_size=72)
 
     @set_ev_cls(ofp_event.EventOFPStateChange, [MAIN_DISPATCHER, DEAD_DISPATCHER])
     def _state_change_handler(self, ev):
@@ -169,6 +161,9 @@ class MainController(app_manager.RyuApp):
         pkt = packet.Packet(msg.data)
         eth = pkt.get_protocols(ethernet.ethernet)[0]
 
+        # Account for Packet-In control overhead
+        self.state_manager.record_packet_in(byte_size=len(msg.data) + 32)
+
         # Ignore LLDP & IPv6 Router Discovery
         if eth.ethertype in (ether_types.ETH_TYPE_LLDP, 0x88cc, 0x86dd):
             return
@@ -179,18 +174,7 @@ class MainController(app_manager.RyuApp):
             self._handle_arp(datapath, in_port, eth, arp_pkt, msg)
             return
 
-        # STAGE 1: Security Analysis (DDPG Agent)
-        is_safe = self.security_module.analyze_packet(pkt, datapath)
-        if not is_safe:
-            # Packet dropped by DDoS security filter
-            return
-
-        # STAGE 2: Multicast Delivery (Dueling DQN Agent)
-        if eth.dst.startswith('01:00:5e') or (pkt.get_protocol(ipv4.ipv4) and pkt.get_protocol(ipv4.ipv4).dst.startswith('224.')):
-            self.multicast_module.handle_multicast(ev, pkt)
-            return
-
-        # STAGE 3: Unicast Traffic Engineering (Double DQN Agent)
+        # Unicast Traffic Engineering via DQN Agent
         self.routing_module.handle_unicast(ev, pkt)
 
     def _handle_arp(self, datapath, in_port, eth, arp_pkt, msg):
@@ -241,9 +225,10 @@ class MainController(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
     def _flow_stats_reply_handler(self, ev):
-        """Processes flow statistics reports."""
+        """Processes flow statistics reports and records control reply overhead."""
         body = ev.msg.body
         dpid = ev.msg.datapath.id
+        self.state_manager.record_stats_reply(byte_size=len(body) * 48 + 16)
 
         for stat in body:
             match = stat.match
@@ -256,9 +241,10 @@ class MainController(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPPortStatsReply, MAIN_DISPATCHER)
     def _port_stats_reply_handler(self, ev):
-        """Processes port statistics reports."""
+        """Processes port statistics reports and records control reply overhead."""
         body = ev.msg.body
         dpid = ev.msg.datapath.id
+        self.state_manager.record_stats_reply(byte_size=len(body) * 64 + 16)
 
         for stat in body:
             if stat.port_no <= ofproto_v1_3.OFPP_MAX:

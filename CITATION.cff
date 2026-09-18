@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use this software or benchmark suite in academic research, please cite it as below."
+authors:
+  - family-names: "Alqadhi"
+    given-names: "Maher Abdulnasir"
+    email: "ma.alqadhi@uot.edu.ly"
+    affiliation: "Department of Computer Engineering, Faculty of Engineering, University of Tripoli"
+    orcid: "https://orcid.org/0009-0000-0000-0000"
+title: "Reinforcement Learning for Adaptive Traffic Engineering in an SDN Network"
+version: 1.0.0
+date-released: 2026-06-15
+repository-code: "https://github.com/maheralqadhi/EC499-SDN-Adaptive-TE-RL"
+keywords:
+  - software-defined-networking
+  - openflow
+  - deep-reinforcement-learning
+  - dueling-double-dqn
+  - prioritized-experience-replay
+  - traffic-engineering
+  - adaptive-routing
+  - mininet
+  - ryu-controller
+license: MIT

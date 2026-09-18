@@ -70,24 +70,22 @@ Evaluated across **Hierarchical Tree**, **Fat-Tree ($k=4$)**, **Abilene US Backb
 │   ├── topology_library.py             # Multi-topology generator (Tree, Fat-Tree, Abilene, NSFNet, Spine-Leaf)
 │   └── traffic_generator.sh            # Synthetic traffic generator (iperf background, elephant & bursts)
 │
-├── archive/
-│   ├── multicast_and_security_extensions/ # Archived non-proposal modules (Multicast & DDPG DDoS defense)
-│   │   ├── README.md                   # Documentation on archived exploratory extensions
-│   │   ├── agent/                      # dqn_multicast.py, ddpg_security.py
-│   │   └── controller/                 # multicast_module.py, security_module.py
-│   └── backup_3000_episodes/           # Archived previous training checkpoint data
-│
 ├── models/
 │   └── dqn_router.pth                  # Trained PyTorch Double DQN weights
 │
 ├── logs/
 │   ├── routing_tournament_results.json # Quantitative benchmark tournament results
-│   ├── evaluation_results.json         # Latest DQN training convergence summary
+│   ├── blind_topologies_stress_results.json # 5-topology stress testing results
+│   ├── stress_test_results.json        # Load balancer stress test results
+│   ├── evaluation_results.json         # DQN training convergence summary
 │   ├── training_metrics.csv            # Episode-by-episode training metric records
 │   └── plots/                          # Publication-grade figures
 │       ├── proposal_benchmarks_all_metrics.png # 6-panel all-metrics comparison
 │       ├── proposal_tournament_radar.png       # Radar chart comparing algorithms
-│       └── dqn_te_training_convergence.png    # Training progression dashboard
+│       ├── dqn_te_training_convergence.png    # Training progression dashboard
+│       ├── blind_topologies_stress_benchmark.png # 5-topology stress comparison
+│       ├── blind_topologies_radar.png          # Blind topology radar
+│       └── stress_test_load_balancing.png      # Load balancing stress test plot
 │
 ├── docs/
 │   └── Project_Report_EC499.md         # Final Technical Graduation Report
@@ -95,8 +93,15 @@ Evaluated across **Hierarchical Tree**, **Fat-Tree ($k=4$)**, **Abilene US Backb
 ├── test_suite.py                       # Unit & integration test suite (18 tests, 100% passing)
 ├── benchmark_routing_algorithms.py     # 5-topology head-to-head tournament benchmark
 ├── benchmark_evaluation.py             # 3-phase curriculum DQN training script
+├── evaluate_random_blind_topology.py   # Zero-shot random dynamic topology evaluation
+├── stress_test_blind_topologies.py     # Multi-topology high-intensity stress suite
+├── stress_test_load_balancer.py        # Core jamming and avalanche stress suite
 ├── simulate_live_traffic.py            # Live traffic driver and simulation runner
-└── run_system.sh                       # One-command system launcher
+├── run_system.sh                       # One-command system launcher
+├── run_random_blind_test.sh            # Quick launcher for zero-shot testing
+├── CITATION.cff                        # Academic citation metadata
+├── requirements.txt                    # Python package dependencies
+└── LICENSE                             # MIT Open-Source License
 ```
 
 ---
@@ -108,23 +113,49 @@ Evaluated across **Hierarchical Tree**, **Fat-Tree ($k=4$)**, **Abilene US Backb
 /home/maher/ec499_env/bin/python test_suite.py -v
 ```
 
-### 2. Run Head-to-Head Routing Tournament Benchmark
+### 2. Run Head-to-Head Routing Tournament Benchmark (5 Topologies)
 ```bash
 /home/maher/ec499_env/bin/python benchmark_routing_algorithms.py
 ```
 
-### 3. Train Deep Q-Network Agent
+### 3. Run Multi-Topology Stress Testing Suite
+```bash
+/home/maher/ec499_env/bin/python stress_test_blind_topologies.py
+```
+
+### 4. Zero-Shot Blind Random Topology Test
+```bash
+/home/maher/ec499_env/bin/python evaluate_random_blind_topology.py --nodes 20 --flows 200
+```
+
+### 5. Train Deep Q-Network Agent
 ```bash
 /home/maher/ec499_env/bin/python benchmark_evaluation.py 1000
 ```
 
-### 4. Launch Ryu Controller and Simulation
+### 6. Launch Ryu Controller, Live Traffic Simulation, and Web Dashboard
 ```bash
 ./run_system.sh
 ```
 
-### 5. Access Interactive Telemetry Web Dashboard
+### 7. Access Interactive Telemetry Web Dashboard
 Open your browser at:
 ```
 http://localhost:8080
+```
+
+---
+
+## Citation
+
+If you use this work in your research or project, please cite:
+
+```bibtex
+@misc{alqadhi2026sdnrl,
+  author = {Maher Abdulnasir Alqadhi and Dr. Suad El-Geder},
+  title = {Reinforcement Learning for Adaptive Traffic Engineering in an SDN Network},
+  year = {2026},
+  publisher = {Department of Computer Engineering, Faculty of Engineering, University of Tripoli},
+  howpublished = {\url{https://github.com/maheralqadhi/EC499-SDN-Adaptive-TE-RL}}
+}
 ```

@@ -49,7 +49,7 @@ class MainController(app_manager.RyuApp):
     def _monitor_loop(self):
         """Periodically requests Port and Flow statistics from all connected switches."""
         while True:
-            self.state_manager.update_security_window()
+            self.state_manager.sample_telemetry_history()
 
             # Actively sync links from Ryu topology service
             try:

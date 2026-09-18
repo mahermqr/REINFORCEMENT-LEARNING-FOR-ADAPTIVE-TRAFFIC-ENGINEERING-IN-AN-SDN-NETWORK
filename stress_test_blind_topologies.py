@@ -154,7 +154,8 @@ def run_blind_topology_stress_tests():
         print(f" • Evaluated Flows:             {n_samples}")
         print(f" • Dijkstra SPF Bottleneck:     {np.mean(t1_spf_u):.2f}%")
         print(f" • Double DQN Bottleneck:       {np.mean(t1_dqn_u):.2f}%")
-        print(f" • Congestion Reduction:        +{t1_relief:.2f}% relief")
+        sign_t1 = "+" if t1_relief >= 0 else ""
+        print(f" • Congestion Reduction:        {sign_t1}{t1_relief:.2f}% {'relief' if t1_relief >= 0 else 'variance'}")
         print(f" • Autonomous Offload Rate:     {t1_offload_rate:.1f}% to alternate paths")
         print(f" • Mean Latency:                DQN: {np.mean(t1_dqn_lat):.2f} ms vs SPF: {np.mean(t1_spf_lat):.2f} ms")
 
@@ -215,7 +216,8 @@ def run_blind_topology_stress_tests():
                 t3_diversions += 1
 
         t3_relief = float(np.mean(t3_spf_u) - np.mean(t3_dqn_u))
-        print(f" • Hotspot Ingress Relief:      +{t3_relief:.2f}% load reduction")
+        sign_t3 = "+" if t3_relief >= 0 else ""
+        print(f" • Hotspot Ingress Relief:      {sign_t3}{t3_relief:.2f}% load reduction")
         print(f" • Local Link Bypass Rate:      {t3_diversions}% rerouted")
 
         # ---------------------------------------------------------------------
@@ -239,7 +241,10 @@ def run_blind_topology_stress_tests():
         t4_savings = float(np.mean(t4_spf_lats) - np.mean(t4_dqn_lats))
         print(f" • Double DQN Mean Latency:     {np.mean(t4_dqn_lats):.2f} ms")
         print(f" • Dijkstra SPF Mean Latency:   {np.mean(t4_spf_lats):.2f} ms")
-        print(f" • Latency Savings:             -{t4_savings:.2f} ms (Faster via low-delay bypass!)")
+        if t4_savings >= 0:
+            print(f" • Latency Savings:             +{t4_savings:.2f} ms (Faster via low-delay bypass)")
+        else:
+            print(f" • Latency Difference:          {t4_savings:.2f} ms (Detour latency trade-off)")
 
         # ---------------------------------------------------------------------
         # TEST 5: Jitter & Packet Loss Mitigation (RFC 3393)

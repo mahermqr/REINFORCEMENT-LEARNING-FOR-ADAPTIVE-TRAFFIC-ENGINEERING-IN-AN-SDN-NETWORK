@@ -31,7 +31,7 @@ sys.path.append(os.path.join(BASE_DIR, 'topology'))
 from dqn_router import DQNRoutingAgent, DuelingQNetwork
 from prioritized_replay import PrioritizedReplayBuffer, SumTree
 from state_manager import StateManager
-from topology_library import get_topology, list_available_topologies
+from topology_library import get_topology, list_available_topologies, build_random_topology
 from traditional_routing import (
     ospf_routing, dijkstra_spf, ecmp_routing, widest_shortest_path,
     least_loaded_routing, random_routing, compute_path_metrics
@@ -279,6 +279,14 @@ class TestMultiTopologySupport(unittest.TestCase):
             self.assertGreater(g.number_of_nodes(), 0)
             self.assertGreater(g.number_of_edges(), 0)
             self.assertTrue(nx.is_strongly_connected(g) or nx.is_weakly_connected(g))
+
+    def test_random_topology_generation(self):
+        g, meta = build_random_topology(num_nodes=15, p_edge=0.30, seed=42)
+        self.assertEqual(g.number_of_nodes(), 15)
+        self.assertTrue(nx.is_strongly_connected(g))
+        self.assertIn('core_nodes', meta)
+        self.assertIn('edge_nodes', meta)
+        self.assertGreaterEqual(len(meta['edge_nodes']), 2)
 
 
 if __name__ == '__main__':

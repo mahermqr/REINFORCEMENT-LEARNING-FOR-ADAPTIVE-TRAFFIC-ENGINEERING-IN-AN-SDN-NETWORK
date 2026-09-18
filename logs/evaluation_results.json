@@ -1,13 +1,13 @@
 {
-  "total_episodes": 2000,
-  "training_time_seconds": 18.2,
-  "final_mean_reward": -0.469,
-  "final_mean_loss": 2.151,
-  "final_dqn_bottleneck_pct": 32.52,
-  "final_spf_bottleneck_pct": 63.01,
-  "congestion_relief_pct": 30.48,
-  "final_latency_ms": 16.25,
-  "final_jitter_ms": 9.668,
-  "final_packet_loss_pct": 1.748,
+  "total_episodes": 1000,
+  "training_time_seconds": 72.1,
+  "final_mean_reward": 1.077,
+  "final_mean_loss": 2.9752,
+  "final_dqn_bottleneck_pct": 29.47,
+  "final_spf_bottleneck_pct": 60.17,
+  "congestion_relief_pct": 30.7,
+  "final_latency_ms": 14.06,
+  "final_jitter_ms": 5.389,
+  "final_packet_loss_pct": 1.3,
   "exploration_decay": "3-Phase Curriculum (Exploration -> Learning -> Exploitation)"
 }

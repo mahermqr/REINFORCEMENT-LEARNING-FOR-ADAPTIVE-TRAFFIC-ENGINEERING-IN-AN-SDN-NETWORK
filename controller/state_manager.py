@@ -559,9 +559,8 @@ class StateManager:
                 self.active_simulation_mode = None
         return restored
 
-    # Backward compatibility stubs for archived modules
-    def update_security_window(self):
-        """Periodic telemetry sampler."""
+    def sample_telemetry_history(self):
+        """Periodic telemetry history sampler."""
         now = time.time()
         te_summary = self.get_network_te_summary()
         self.telemetry_history.append({
@@ -575,3 +574,7 @@ class StateManager:
             'active_flows': te_summary['active_flows_count'],
             'flow_mods': te_summary['control_overhead']['flow_mod_count']
         })
+
+    def update_security_window(self):
+        """Alias for backward compatibility."""
+        self.sample_telemetry_history()

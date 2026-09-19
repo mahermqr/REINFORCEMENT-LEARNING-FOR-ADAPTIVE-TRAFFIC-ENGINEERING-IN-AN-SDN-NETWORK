@@ -163,9 +163,7 @@ def run_full_training(episodes=1000):
                 if (v, u) in sm.link_utilization:
                     sm.link_utilization[(v, u)] = sm.link_utilization[(u, v)]
         elif traffic_mode == 'core_jam':
-            for u, v in sm.graph.edges():
-                if u in core_nodes or v in core_nodes:
-                    sm.link_utilization[(u, v)] = random.uniform(0.82, 0.98)
+            sm.inject_core_congestion(utilization=random.uniform(0.82, 0.98), core_nodes=core_nodes, asymmetric_ratio=0.5)
 
         # 4. Agent Decision on pre-decision state s_t
         state = sm.get_routing_state(src, dst)

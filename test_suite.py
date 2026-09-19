@@ -289,5 +289,59 @@ class TestMultiTopologySupport(unittest.TestCase):
         self.assertGreaterEqual(len(meta['edge_nodes']), 2)
 
 
+class TestClosedLoopDynamicsAndUpgrades(unittest.TestCase):
+    """Verifies architectural upgrades: Polyak soft updates, dynamic closed-loop flow dynamics, and generalized core congestion."""
+
+    def test_polyak_soft_update_consistency(self):
+        agent = DQNRoutingAgent(state_size=10, action_size=4, tau=0.01)
+        # Store initial target weights
+        init_target_param = next(agent.target_model.parameters()).clone()
+        # Mutate policy network weights
+        with torch.no_grad():
+            for p in agent.model.parameters():
+                p.add_(1.0)
+        # Populate replay buffer and train one step
+        for _ in range(40):
+            s = np.random.rand(10).astype(np.float32)
+            agent.remember(s, 0, 1.0, s, False)
+        agent.train(batch_size=16)
+        updated_target_param = next(agent.target_model.parameters())
+        # Target parameter should have smoothly shifted towards policy parameter
+        self.assertFalse(torch.equal(init_target_param, updated_target_param))
+
+    def test_closed_loop_flow_accumulation_and_expiration(self):
+        sm = StateManager()
+        sm.update_link(1, 2, src_port=1, dst_port=1, capacity_mbps=100.0, delay_ms=2.0)
+        sm.update_link(2, 3, src_port=1, dst_port=1, capacity_mbps=100.0, delay_ms=2.0)
+        init_u = sm.link_utilization.get((1, 2), 0.0)
+
+        # Allocate dynamic flow of 30 Mbps
+        sm.allocate_dynamic_flow(flow_id="f1", path=[1, 2, 3], mbps=30.0, duration_sec=0.2)
+        post_alloc_u = sm.link_utilization[(1, 2)]
+        self.assertAlmostEqual(post_alloc_u, init_u + 0.30, places=2)
+        self.assertGreater(sm.link_loss[(1, 2)], 0.0)
+
+        # Expire flow
+        time.sleep(0.25)
+        expired_count = sm.step_dynamic_flows()
+        self.assertEqual(expired_count, 1)
+        reclaimed_u = sm.link_utilization[(1, 2)]
+        self.assertLess(reclaimed_u, post_alloc_u)
+
+    def test_generalized_core_congestion_across_topologies(self):
+        # Test topology-agnostic core discovery on NSFNet (continental mesh)
+        g_nsf, meta_nsf = get_topology('nsfnet')
+        sm = StateManager()
+        sm.graph = g_nsf.copy()
+        for u, v, d in g_nsf.edges(data=True):
+            sm.update_link(u, v, src_port=1, dst_port=1, capacity_mbps=d.get('capacity', 100.0), delay_ms=d.get('delay', 2.0))
+
+        congested_count = sm.inject_core_congestion(utilization=0.92)
+        self.assertGreater(congested_count, 0)
+        # Verify that saturated links have high utilization and analytical loss
+        max_u = max(sm.link_utilization.values())
+        self.assertAlmostEqual(max_u, 0.92, places=2)
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

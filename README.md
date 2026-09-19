@@ -29,22 +29,23 @@ This platform integrates a **Dueling Double Deep Q-Network (D3QN)** with **Prior
 | **Objective 5** | Evaluate performance using packet loss and control overhead metrics | M/M/1/K buffer overflow loss model and OpenFlow message accounting (`OFPPacketIn`, `OFPFlowMod`, decision latency) |
 | **Procedure 4** | Train DQN agent using synthetic traffic patterns to simulate load | Poisson burst generator, elephant flows, and core jamming stress tests (`topology/traffic_generator.sh`) |
 | **Procedure 5** | Benchmark RL agent against OSPF and greedy routing baselines | Automated tournament benchmark (`benchmark_routing_algorithms.py`) comparing DQN against OSPF (RFC 2328), Dijkstra SPF, ECMP, WSP, and LLR |
-| **Procedure 6** | Document findings and prepare final technical report and source code | Complete technical report (`docs/Project_Report_EC499.md`), 18 passing unit tests (`test_suite.py`), and publication plots in `logs/plots/` |
+| **Procedure 6** | Document findings and prepare final technical report and source code | Complete technical report (`docs/Project_Report_EC499.md`), 22 passing unit tests (`test_suite.py`), and publication plots in `logs/plots/` |
 
 ---
 
 ## Head-to-Head Benchmark Summary across 5 Topologies
 
-Evaluated across **Hierarchical Tree**, **Fat-Tree ($k=4$)**, **Abilene US Backbone**, **NSFNet Continental Mesh**, and **Spine-Leaf Fabrics**:
+Evaluated under **closed-loop dynamic flow accumulation and lifecycle stepping** across **Hierarchical Tree**, **Fat-Tree ($k=4$)**, **Abilene US Backbone**, **NSFNet Continental Mesh**, and **Spine-Leaf Fabrics**:
 
 | Metric | OSPF (RFC 2328) | Dijkstra SPF | ECMP | Greedy LLR | DQN Traffic Engineering (Ours) | Net Advantage |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Bottleneck Link Load** | 49.4% – 94.0% | 23.2% – 94.0% | 23.2% – 92.8% | 18.2% – 89.5% | **23.2% – 89.5%** | **Up to +26.2% Congestion Relief** |
-| **End-to-End Latency** | 20.7 – 60.5 ms | 11.6 – 56.2 ms | 11.5 – 52.8 ms | 13.0 – 18.6 ms | **11.6 – 20.7 ms** | **73.5% Faster Transmission** |
-| **Network Jitter (RFC 3393)** | 28.7 – 127.5 ms | 1.1 – 117.9 ms | 1.1 – 107.1 ms | 1.1 – 42.1 ms | **1.1 – 46.5 ms** | **> 97% Jitter Suppression** |
-| **Packet Loss Rate** | 2.2% – 18.8% | 0.01% – 18.8% | 0.01% – 17.0% | 0.01% – 11.8% | **0.01% – 14.8%** | **Near-Zero Dropouts Under Bursts** |
-| **Offload Rate** | 0.0% (Static) | 0.0% (Base) | 1.3% – 74.7% | 9.3% – 94.0% | **25.3% – 100.0%** | **Proactive Jamming Avoidance** |
-| **Decision Latency** | 0.08 – 0.11 ms | 0.07 – 0.09 ms | 0.12 – 0.15 ms | 0.35 – 0.42 ms | **0.38 – 0.43 ms** | **> 2,400 Decisions/Second** |
+| **Bottleneck Link Load** | 48.4% – 86.7% | 33.1% – 86.7% | 32.7% – 92.0% | 29.4% – 91.1% | **29.7% – 89.5%** | **Up to +10.5% lower peak than greedy LLR/WSP** |
+| **Fat-Tree Bottleneck** | 65.5% | 65.5% | 79.8% | 76.4% | **65.9%** | **Prevents greedy herd-behavior collapse** |
+| **Spine-Leaf Bottleneck**| 86.7% | 86.7% | 92.0% | 91.1% | **89.5%** | **Lower bottleneck than ECMP & LLR** |
+| **Fat-Tree Latency** | 164.0 ms | 164.0 ms | 196.7 ms | 169.7 ms | **161.4 ms** | **Lowest latency across dynamic algorithms** |
+| **Packet Loss Rate** | 1.2% – 13.5% | 0.9% – 13.5% | 0.9% – 15.8% | 0.08% – 14.2% | **0.08% – 14.7%** | **Lowest loss on Fat-Tree fabric (9.05%)** |
+| **Offload Rate** | 0.0% (Static) | 0.0% (Base) | 2.0% – 74.7% | 8.0% – 78.7% | **14.0% – 100.0%** | **Dynamic anti-congestion steering** |
+| **Decision Latency** | 0.08 – 0.11 ms | 0.07 – 0.09 ms | 0.12 – 0.15 ms | 0.35 – 0.42 ms | **0.38 – 0.43 ms** | **> 2,500 Decisions/Second** |
 
 ---
 
@@ -90,7 +91,7 @@ Evaluated across **Hierarchical Tree**, **Fat-Tree ($k=4$)**, **Abilene US Backb
 ├── docs/
 │   └── Project_Report_EC499.md         # Final Technical Graduation Report
 │
-├── test_suite.py                       # Unit & integration test suite (18 tests, 100% passing)
+├── test_suite.py                       # Unit & integration test suite (22 tests, 100% passing)
 ├── benchmark_routing_algorithms.py     # 5-topology head-to-head tournament benchmark
 ├── benchmark_evaluation.py             # 3-phase curriculum DQN training script
 ├── evaluate_random_blind_topology.py   # Zero-shot random dynamic topology evaluation
@@ -108,7 +109,7 @@ Evaluated across **Hierarchical Tree**, **Fat-Tree ($k=4$)**, **Abilene US Backb
 
 ## Quick Start & Verification
 
-### 1. Run Unit & Integration Tests (18 Tests)
+### 1. Run Unit & Integration Tests (22 Tests)
 ```bash
 /home/maher/ec499_env/bin/python test_suite.py -v
 ```

@@ -150,7 +150,8 @@ def run_full_training(episodes=1000):
         #  - Mode C (20%): Core Jamming (core/aggregation transit nodes saturated)
         traffic_mode = random.choices(['nominal', 'congested_primary', 'core_jam'], weights=[0.35, 0.45, 0.20])[0]
 
-        # Reset nominal link loads
+        # Reset nominal link loads and base delays
+        sm.reset_simulation()
         for u, v in sm.graph.edges():
             sm.link_utilization[(u, v)] = random.uniform(0.10, 0.30)
 
@@ -166,12 +167,17 @@ def run_full_training(episodes=1000):
                 if u in core_nodes or v in core_nodes:
                     sm.link_utilization[(u, v)] = random.uniform(0.82, 0.98)
 
-        # 4. Agent Decision
+        # 4. Agent Decision on pre-decision state s_t
         state = sm.get_routing_state(src, dst)
         action = router_agent.act(state, explore=True)
         chosen_path = cand_paths[action % len(cand_paths)]
 
-        # 5. Telemetry calculation
+        # Dynamic Closed-Loop Flow Allocation:
+        # Flow consumes bandwidth along chosen_path, authentically altering the network state:
+        flow_mbps = random.uniform(10.0, 20.0)
+        sm.allocate_dynamic_flow(flow_id=f"train_{ep}", path=chosen_path, mbps=flow_mbps, duration_sec=3.0)
+
+        # 5. Telemetry calculation reflecting true post-decision link states
         m_spf = compute_path_metrics(spf_path, sm.link_utilization, sm.link_delays, sm.link_bandwidths)
         m_dqn = compute_path_metrics(chosen_path, sm.link_utilization, sm.link_delays, sm.link_bandwidths)
 
@@ -194,7 +200,7 @@ def run_full_training(episodes=1000):
         else:
             # Case 2: Primary path is congested (u_spf > 0.60)!
             # Strongly incentivize diverting traffic to less loaded candidate paths
-            if u_dqn < u_spf - 0.10:
+            if u_dqn < u_spf - 0.08:
                 # Big positive reward for offloading traffic away from congestion
                 relief = u_spf - u_dqn
                 reward = 12.0 * relief + 4.0 * (1.0 - u_dqn) - 0.15 * jit_dqn - 1.5 * loss_dqn
@@ -205,12 +211,15 @@ def run_full_training(episodes=1000):
                 # Alternative path chosen is also congested
                 reward = - 8.0 * (u_dqn ** 2) - 0.3 * jit_dqn - 2.0 * loss_dqn
 
-        # 7. Next state & Experience Replay
+        # 7. Observe genuine posterior state s_{t+1} after traffic placement
         next_state = sm.get_routing_state(src, dst)
         router_agent.remember(state, action, reward, next_state, done=False)
 
         # 8. Train policy network with mini-batch Double DQN update
         loss_val = router_agent.train(batch_size=32) or 0.05
+
+        # Expire past flows to maintain realistic non-stationary traffic matrix
+        sm.step_dynamic_flows(current_time=time.time() + (ep * 0.1))
 
         # Record history
         history['episodes'].append(ep)

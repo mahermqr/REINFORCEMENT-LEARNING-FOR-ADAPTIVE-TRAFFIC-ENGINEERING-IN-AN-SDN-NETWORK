@@ -112,91 +112,69 @@ def run_routing_tournament():
         algo_losses = {algo: [] for algo in algorithms}
         algo_offloaded = {algo: 0 for algo in algorithms}
 
+        # Generate deterministic synthetic flow sequence (identical across all algorithms)
         random.seed(42 + len(g))
+        flow_specs = []
         for flow_idx in range(flow_samples):
             src = random.choice(edge_nodes)
             dst_opts = [n for n in edge_nodes if n != src]
             dst = random.choice(dst_opts)
+            mbps = random.uniform(3.0, 7.0)
+            duration = random.uniform(15.0, 30.0)
+            flow_specs.append((src, dst, mbps, duration))
 
-            cand_paths = sm.get_candidate_paths(src, dst, k=4)
-            primary_path = cand_paths[0]
+        # Closed-Loop Dynamic Evaluation: each algorithm manages its own network state
+        for algo in algorithms:
+            sm_algo = StateManager()
+            sm_algo.graph = g.copy()
+            for u, v, d in g.edges(data=True):
+                cap = d.get('capacity', 100.0)
+                delay = d.get('delay', 2.0)
+                sm_algo.update_link(u, v, src_port=1, dst_port=1, capacity_mbps=cap, delay_ms=delay)
 
-            # 1. OSPF
-            t0 = time.perf_counter()
-            p_ospf = ospf_routing(sm.graph, src, dst, link_bandwidths=sm.link_bandwidths)
-            t_ospf = (time.perf_counter() - t0) * 1000.0
-            decision_timings['OSPF (RFC 2328)'].append(t_ospf)
-            m_ospf = compute_path_metrics(p_ospf, sm.link_utilization, sm.link_delays, sm.link_bandwidths)
-            algo_utils['OSPF (RFC 2328)'].append(m_ospf['bottleneck_util'])
-            algo_lats['OSPF (RFC 2328)'].append(m_ospf['total_delay'])
-            algo_jits['OSPF (RFC 2328)'].append(m_ospf['jitter'])
-            algo_losses['OSPF (RFC 2328)'].append(m_ospf['packet_loss'])
+            # Apply topology-agnostic core saturation (85-95%)
+            sm_algo.inject_core_congestion(utilization=0.90, core_nodes=core_nodes)
 
-            # 2. Dijkstra SPF
-            t0 = time.perf_counter()
-            p_spf = dijkstra_spf(sm.graph, src, dst)
-            t_spf = (time.perf_counter() - t0) * 1000.0
-            decision_timings['Dijkstra SPF'].append(t_spf)
-            m_spf = compute_path_metrics(p_spf, sm.link_utilization, sm.link_delays, sm.link_bandwidths)
-            algo_utils['Dijkstra SPF'].append(m_spf['bottleneck_util'])
-            algo_lats['Dijkstra SPF'].append(m_spf['total_delay'])
-            algo_jits['Dijkstra SPF'].append(m_spf['jitter'])
-            algo_losses['Dijkstra SPF'].append(m_spf['packet_loss'])
+            # Route each flow dynamically
+            for flow_idx, (src, dst, mbps, duration) in enumerate(flow_specs):
+                cand_paths = sm_algo.get_candidate_paths(src, dst, k=4)
+                p_ospf_ref = cand_paths[0]
 
-            # 3. ECMP
-            t0 = time.perf_counter()
-            p_ecmp = ecmp_routing(sm.graph, src, dst, flow_hash=flow_idx)
-            t_ecmp = (time.perf_counter() - t0) * 1000.0
-            decision_timings['ECMP'].append(t_ecmp)
-            m_ecmp = compute_path_metrics(p_ecmp, sm.link_utilization, sm.link_delays, sm.link_bandwidths)
-            algo_utils['ECMP'].append(m_ecmp['bottleneck_util'])
-            algo_lats['ECMP'].append(m_ecmp['total_delay'])
-            algo_jits['ECMP'].append(m_ecmp['jitter'])
-            algo_losses['ECMP'].append(m_ecmp['packet_loss'])
+                t0 = time.perf_counter()
+                if algo == 'OSPF (RFC 2328)':
+                    p = ospf_routing(sm_algo.graph, src, dst, link_bandwidths=sm_algo.link_bandwidths)
+                elif algo == 'Dijkstra SPF':
+                    p = dijkstra_spf(sm_algo.graph, src, dst)
+                elif algo == 'ECMP':
+                    p = ecmp_routing(sm_algo.graph, src, dst, flow_hash=flow_idx)
+                elif algo == 'WSP (Widest Path)':
+                    p = widest_shortest_path(sm_algo.graph, src, dst, sm_algo.link_utilization, sm_algo.link_delays, candidate_paths=cand_paths)
+                elif algo == 'LLR (Least Loaded)':
+                    p = least_loaded_routing(sm_algo.graph, src, dst, sm_algo.link_utilization, candidate_paths=cand_paths)
+                elif algo == 'DQN (Ours)':
+                    st = sm_algo.get_routing_state(src, dst)
+                    act = router_agent.act(st, explore=False)
+                    p = cand_paths[act % len(cand_paths)]
+                else:
+                    p = cand_paths[0]
+                t_dec = (time.perf_counter() - t0) * 1000.0
+                decision_timings[algo].append(t_dec)
 
-            # 4. WSP
-            t0 = time.perf_counter()
-            p_wsp = widest_shortest_path(sm.graph, src, dst, sm.link_utilization, sm.link_delays, candidate_paths=cand_paths)
-            t_wsp = (time.perf_counter() - t0) * 1000.0
-            decision_timings['WSP (Widest Path)'].append(t_wsp)
-            m_wsp = compute_path_metrics(p_wsp, sm.link_utilization, sm.link_delays, sm.link_bandwidths)
-            algo_utils['WSP (Widest Path)'].append(m_wsp['bottleneck_util'])
-            algo_lats['WSP (Widest Path)'].append(m_wsp['total_delay'])
-            algo_jits['WSP (Widest Path)'].append(m_wsp['jitter'])
-            algo_losses['WSP (Widest Path)'].append(m_wsp['packet_loss'])
+                # Compute performance metrics under active placement
+                m = compute_path_metrics(p, sm_algo.link_utilization, sm_algo.link_delays, sm_algo.link_bandwidths)
+                algo_utils[algo].append(m['bottleneck_util'])
+                algo_lats[algo].append(m['total_delay'])
+                algo_jits[algo].append(m['jitter'])
+                algo_losses[algo].append(m['packet_loss'])
 
-            # 5. LLR
-            t0 = time.perf_counter()
-            p_llr = least_loaded_routing(sm.graph, src, dst, sm.link_utilization, candidate_paths=cand_paths)
-            t_llr = (time.perf_counter() - t0) * 1000.0
-            decision_timings['LLR (Least Loaded)'].append(t_llr)
-            m_llr = compute_path_metrics(p_llr, sm.link_utilization, sm.link_delays, sm.link_bandwidths)
-            algo_utils['LLR (Least Loaded)'].append(m_llr['bottleneck_util'])
-            algo_lats['LLR (Least Loaded)'].append(m_llr['total_delay'])
-            algo_jits['LLR (Least Loaded)'].append(m_llr['jitter'])
-            algo_losses['LLR (Least Loaded)'].append(m_llr['packet_loss'])
+                # Allocate dynamic flow onto selected path links (closed-loop load accumulation)
+                sm_algo.allocate_dynamic_flow(flow_id=f"{algo}_{flow_idx}", path=p, mbps=mbps, duration_sec=duration)
 
-            # 6. DQN (Ours)
-            t0 = time.perf_counter()
-            st = sm.get_routing_state(src, dst)
-            action = router_agent.act(st, explore=False)
-            p_dqn = cand_paths[action % len(cand_paths)]
-            t_dqn = (time.perf_counter() - t0) * 1000.0
-            decision_timings['DQN (Ours)'].append(t_dqn)
-            m_dqn = compute_path_metrics(p_dqn, sm.link_utilization, sm.link_delays, sm.link_bandwidths)
-            algo_utils['DQN (Ours)'].append(m_dqn['bottleneck_util'])
-            algo_lats['DQN (Ours)'].append(m_dqn['total_delay'])
-            algo_jits['DQN (Ours)'].append(m_dqn['jitter'])
-            algo_losses['DQN (Ours)'].append(m_dqn['packet_loss'])
+                if p != p_ospf_ref:
+                    algo_offloaded[algo] += 1
 
-            if p_ospf != p_dqn:
-                algo_offloaded['DQN (Ours)'] += 1
-            if p_ospf != p_wsp:
-                algo_offloaded['WSP (Widest Path)'] += 1
-            if p_ospf != p_llr:
-                algo_offloaded['LLR (Least Loaded)'] += 1
-            if p_ospf != p_ecmp:
-                algo_offloaded['ECMP'] += 1
+                # Advance simulated time & expire past flows
+                sm_algo.step_dynamic_flows(current_time=time.time() + (flow_idx * 0.4))
 
         for algo in algorithms:
             b_util = float(np.mean(algo_utils[algo]) * 100.0)

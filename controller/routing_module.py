@@ -1,6 +1,7 @@
 import sys
 import os
 import time
+import threading
 import numpy as np
 
 # Add agent and controller to path
@@ -22,7 +23,7 @@ class RoutingModule:
 
         # Initialize Double DQN Agent (10 state features, 4 candidate path actions)
         self.agent = DQNRoutingAgent(state_size=10, action_size=4, lr=0.001)
-        self.prev_experience = {} # (src_dpid, dst_dpid) -> (state, action)
+        self.prev_experience = {} # (src_dpid, dst_dpid) -> (state, action, candidate_paths)
 
         # Auto-load trained checkpoint if available
         ckpt_path = os.path.join(os.path.dirname(__file__), '..', 'models', 'dqn_router.pth')
@@ -30,7 +31,36 @@ class RoutingModule:
             self.agent.load(ckpt_path)
             self.logger.info("[RoutingModule] Loaded pre-trained Double DQN checkpoint from %s", ckpt_path)
 
+        # Asynchronous background training worker to prevent blocking OpenFlow PacketIn processing
+        self._training_active = False
+        self._training_thread = None
+        self.start_training_worker()
+
         self.logger.info("[RoutingModule] Initialized with Double DQN Agent on device: %s", self.agent.device)
+
+    def start_training_worker(self):
+        """Starts decoupled background worker thread for PyTorch policy optimization."""
+        if not self._training_active:
+            self._training_active = True
+            self._training_thread = threading.Thread(target=self._training_loop, daemon=True)
+            self._training_thread.start()
+            self.logger.info("[RoutingModule] Asynchronous background training worker started.")
+
+    def stop_training_worker(self):
+        """Halts background training worker gracefully."""
+        self._training_active = False
+
+    def _training_loop(self):
+        """Background thread executing periodic Double DQN policy updates."""
+        while self._training_active:
+            try:
+                time.sleep(2.0)
+                if hasattr(self.agent, 'memory') and len(self.agent.memory) >= 32:
+                    loss = self.agent.train(batch_size=32)
+                    if loss is not None:
+                        self.logger.debug("[RoutingModule-Worker] Asynchronous DQN Loss: %.4f | Epsilon: %.3f", loss, self.agent.epsilon)
+            except Exception as e:
+                self.logger.error("[RoutingModule-Worker] Training exception: %s", e)
 
     def handle_unicast(self, ev, pkt):
         """Processes unicast packets, computes optimal path via DQN, and installs multi-hop flows."""
@@ -71,7 +101,8 @@ class RoutingModule:
         # Case 2: Multi-hop routing across SDN fabric
         t0 = time.time()
         state = self.state_manager.get_routing_state(dpid, dst_dpid)
-        action = self.agent.act(state, explore=True)
+        # Production traffic uses deterministic policy evaluation (explore=False)
+        action = self.agent.act(state, explore=False)
         decision_time_ms = (time.time() - t0) * 1000.0
         self.state_manager.record_decision_latency(decision_time_ms)
 
@@ -85,22 +116,19 @@ class RoutingModule:
         # Action selects from candidate paths (modulo candidate count)
         selected_path = candidate_paths[action % len(candidate_paths)]
 
-        # Calculate reward based on path hops, latency, jitter, loss, and utilization
-        reward = self._calculate_reward(selected_path)
-
-        # Experience Replay Training: record transition (s, a, r, s')
+        # Experience Replay Training: record transition with rigorous temporal credit assignment
         exp_key = (dpid, dst_dpid)
         if exp_key in self.prev_experience:
-            prev_s, prev_a = self.prev_experience[exp_key]
+            prev_s, prev_a, prev_paths = self.prev_experience[exp_key]
+            # Reward is calculated for previous action prev_a observed in current network state
+            chosen_prev_path = prev_paths[prev_a % len(prev_paths)]
+            reward = self._calculate_reward(chosen_prev_path)
             self.agent.remember(prev_s, prev_a, reward, state, done=False)
-            loss = self.agent.train(batch_size=32)
-            if loss is not None:
-                self.logger.debug("[RoutingModule] DQN Training Loss: %.4f | Epsilon: %.3f", loss, self.agent.epsilon)
 
-        self.prev_experience[exp_key] = (state, action)
+        self.prev_experience[exp_key] = (state, action, candidate_paths)
 
-        self.logger.info("[RoutingModule] Routing %s -> %s via path: %s | Action: %d | Decision: %.2f ms | Reward: %.2f",
-                         src_ip or src_mac, dst_ip or dst_mac, selected_path, action, decision_time_ms, reward)
+        self.logger.info("[RoutingModule] Routing %s -> %s via path: %s | Action: %d | Decision: %.2f ms",
+                         src_ip or src_mac, dst_ip or dst_mac, selected_path, action, decision_time_ms)
 
         # Install OpenFlow 1.3 flow rules along the entire path
         self._install_path(selected_path, dst_port, eth_dst=dst_mac, ip_src=src_ip, ip_dst=dst_ip)

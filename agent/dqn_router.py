@@ -162,16 +162,24 @@ class DQNRoutingAgent:
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
 
-        # Polyak soft target update for continuous smooth value target learning
-        for target_p, p in zip(self.target_model.parameters(), self.model.parameters()):
-            target_p.data.copy_(self.tau * p.data + (1.0 - self.tau) * target_p.data)
+        # Continuous Polyak soft target update (Lillicrap et al. / DDPG / D3QN standard):
+        # Target network smoothly tracks the policy network without abrupt variance spikes:
+        # \theta_{target} \leftarrow \tau \theta_{policy} + (1 - \tau) \theta_{target}
+        with torch.no_grad():
+            for target_p, p in zip(self.target_model.parameters(), self.model.parameters()):
+                target_p.data.copy_(self.tau * p.data + (1.0 - self.tau) * target_p.data)
 
-        # Periodic hard target network sync
         self.update_target_counter += 1
-        if self.update_target_counter % self.target_update_freq == 0:
-            self.target_model.load_state_dict(self.model.state_dict())
-
         return loss_val
+
+    def get_q_values(self, state):
+        """Returns raw Q-values for all candidate actions for a given state vector."""
+        state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+        self.model.eval()
+        with torch.no_grad():
+            q_vals = self.model(state_tensor).squeeze(0).cpu().numpy()
+        self.model.train()
+        return q_vals
 
     def save(self, filepath):
         """Saves model checkpoint."""

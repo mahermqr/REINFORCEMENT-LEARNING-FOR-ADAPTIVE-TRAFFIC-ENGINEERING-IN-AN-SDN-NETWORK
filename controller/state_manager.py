@@ -17,10 +17,12 @@ class StateManager:
         # Link metric dictionaries: keyed by (src_dpid, dst_dpid)
         self.link_bandwidths = {}   # Capacity in Mbps (default: 100 Mbps)
         self.link_utilization = {}  # Current utilization [0.0 - 1.0]
-        self.link_delays = {}       # Latency in ms (default: 2.0 ms)
+        self.base_link_delays = {}  # Static physical base latency in ms (uncongested)
+        self.link_delays = {}       # Real-time queuing latency in ms
         self.link_jitter = {}       # Network Jitter / Delay Variation in ms (RFC 3393)
         self.link_loss = {}         # Packet loss rate percentage [0.0 - 100.0%]
         self._prev_delays = {}      # Previous delay sample for jitter calculation
+        self.active_dynamic_flows = {} # flow_id -> {'path', 'mbps', 'expires_at'}
 
         # Host tracking tables: enables dynamic ARP/L2/L3 resolution
         self.host_ip_to_mac = {}    # ip -> mac
@@ -77,6 +79,7 @@ class StateManager:
         self.graph.add_edge(src_dpid, dst_dpid, port=src_port, peer_port=dst_port)
         self._routing_path_cache.clear()
         self.link_bandwidths[(src_dpid, dst_dpid)] = float(capacity_mbps)
+        self.base_link_delays[(src_dpid, dst_dpid)] = float(delay_ms)
         if (src_dpid, dst_dpid) not in self.link_delays:
             self.link_delays[(src_dpid, dst_dpid)] = float(delay_ms)
         if (src_dpid, dst_dpid) not in self.link_jitter:
@@ -490,32 +493,139 @@ class StateManager:
                     'rx_mbps': mbps, 'tx_mbps': mbps, 'rx_pps': pps, 'tx_pps': pps
                 }
 
-    def inject_core_congestion(self, utilization=0.95):
-        """Saturates core switch links to test lateral cross-link rerouting."""
-        core_edges = [(1, 2), (2, 1), (1, 3), (3, 1), (2, 4), (4, 2), (2, 5), (5, 2), (3, 6), (6, 3), (3, 7), (7, 3)]
-        for u, v in core_edges:
-            if (u, v) in self.link_utilization or self.graph.has_edge(u, v):
-                self.link_utilization[(u, v)] = utilization
-                self.link_loss[(u, v)] = 21.5 # High packet loss under core congestion
-                self.link_jitter[(u, v)] = 12.8 # High queuing jitter
-                self.link_delays[(u, v)] = 22.0 # High queuing delay
+    # --------------------------------------------------------------------------
+    # Closed-Loop Dynamic Flow Allocation (Proposal Objective 4)
+    # --------------------------------------------------------------------------
 
-        # Keep lateral cross-links uncongested
-        for u, v in [(4, 6), (6, 4), (5, 7), (7, 5)]:
-            if (u, v) in self.link_utilization or self.graph.has_edge(u, v):
-                self.link_utilization[(u, v)] = 0.18
+    def allocate_dynamic_flow(self, flow_id, path, mbps=5.0, duration_sec=10.0):
+        """
+        Allocates an active unicast flow along a designated multi-hop path.
+        Simulates dynamic closed-loop bandwidth consumption on link queues.
+        """
+        now = time.time()
+        if not hasattr(self, 'active_dynamic_flows'):
+            self.active_dynamic_flows = {}
+
+        self.active_dynamic_flows[flow_id] = {
+            'path': list(path),
+            'mbps': float(mbps),
+            'expires_at': now + float(duration_sec)
+        }
+        for i in range(len(path) - 1):
+            u, v = path[i], path[i + 1]
+            cap = self.link_bandwidths.get((u, v), 100.0)
+            delta_u = mbps / max(1.0, cap)
+            new_u = min(1.0, self.link_utilization.get((u, v), 0.05) + delta_u)
+            self.link_utilization[(u, v)] = new_u
+
+            # Recalculate analytical queue loss & latency
+            if new_u <= 0.70:
+                loss_pct = new_u * 0.05
+            else:
+                excess = (new_u - 0.70) / 0.30
+                loss_pct = min(35.0, 0.05 + 30.0 * (excess ** 2.2))
+            self.link_loss[(u, v)] = float(loss_pct)
+
+            base_d = self.base_link_delays.get((u, v), 2.0)
+            q_delay = base_d * (0.2 + 0.8 / max(0.05, 1.0 - min(0.95, new_u)))
+            self.update_link_latency(u, v, q_delay)
+
+    def release_dynamic_flow(self, flow_id):
+        """Reclaims link bandwidth and relieves queue congestion upon flow completion."""
+        if not hasattr(self, 'active_dynamic_flows'):
+            self.active_dynamic_flows = {}
+            return
+        flow = self.active_dynamic_flows.pop(flow_id, None)
+        if not flow:
+            return
+        path = flow['path']
+        mbps = flow['mbps']
+        for i in range(len(path) - 1):
+            u, v = path[i], path[i + 1]
+            cap = self.link_bandwidths.get((u, v), 100.0)
+            delta_u = mbps / max(1.0, cap)
+            new_u = max(0.02, self.link_utilization.get((u, v), 0.05) - delta_u)
+            self.link_utilization[(u, v)] = new_u
+            if new_u <= 0.70:
+                loss_pct = new_u * 0.05
+            else:
+                excess = (new_u - 0.70) / 0.30
+                loss_pct = min(35.0, 0.05 + 30.0 * (excess ** 2.2))
+            self.link_loss[(u, v)] = float(loss_pct)
+
+            base_d = self.base_link_delays.get((u, v), 2.0)
+            q_delay = base_d * (0.2 + 0.8 / max(0.05, 1.0 - min(0.95, new_u)))
+            self.update_link_latency(u, v, q_delay)
+
+    def step_dynamic_flows(self, current_time=None):
+        """Expires finished flows whose lifespan has ended."""
+        if not hasattr(self, 'active_dynamic_flows'):
+            self.active_dynamic_flows = {}
+            return 0
+        now = current_time or time.time()
+        expired = [fid for fid, f in self.active_dynamic_flows.items() if now >= f['expires_at']]
+        for fid in expired:
+            self.release_dynamic_flow(fid)
+        return len(expired)
+
+    def inject_core_congestion(self, utilization=0.95, core_nodes=None):
+        """
+        Saturates core switch links to test lateral cross-link rerouting.
+        Topology-Agnostic: dynamically identifies core / transit bottlenecks via
+        metadata or networkx edge betweenness centrality.
+        """
+        target_edges = []
+        if core_nodes:
+            for u, v in self.graph.edges():
+                if u in core_nodes or v in core_nodes:
+                    target_edges.append((u, v))
+        elif hasattr(self, 'active_core_nodes') and self.active_core_nodes:
+            for u, v in self.graph.edges():
+                if u in self.active_core_nodes or v in self.active_core_nodes:
+                    target_edges.append((u, v))
+        else:
+            # Fallback: Automatic discovery via Edge Betweenness Centrality on arbitrary graph
+            if self.graph.number_of_edges() > 0:
+                centrality = nx.edge_betweenness_centrality(self.graph)
+                sorted_edges = sorted(centrality.items(), key=lambda x: x[1], reverse=True)
+                top_k = max(2, int(len(sorted_edges) * 0.25))
+                target_edges = [edge for edge, _ in sorted_edges[:top_k]]
+                for u, v in list(target_edges):
+                    if self.graph.has_edge(v, u) and (v, u) not in target_edges:
+                        target_edges.append((v, u))
+
+        # Apply high congestion to discovered core edges
+        target_set = set(target_edges)
+        for u, v in self.graph.edges():
+            if (u, v) in target_set:
+                self.link_utilization[(u, v)] = float(utilization)
+                self.link_loss[(u, v)] = 21.5
+                self.link_jitter[(u, v)] = 12.8
+                base_d = self.base_link_delays.get((u, v), 2.0)
+                self.link_delays[(u, v)] = max(base_d * 5.0, 20.0)
+            else:
+                # Keep lateral / perimeter edges uncongested
+                self.link_utilization[(u, v)] = 0.15
                 self.link_loss[(u, v)] = 0.01
                 self.link_jitter[(u, v)] = 0.45
-                self.link_delays[(u, v)] = 8.0
+                if (u, v) in self.link_delays:
+                    base_d = self.base_link_delays.get((u, v), 2.0)
+                    self.link_delays[(u, v)] = base_d
 
         self.active_simulation_mode = "core_jamming"
+        return len(target_edges)
 
     def reset_simulation(self):
         """Resets link utilization and clears simulated telemetry."""
+        if hasattr(self, 'active_dynamic_flows'):
+            self.active_dynamic_flows.clear()
         for k in self.link_utilization:
             self.link_utilization[k] = 0.05
             self.link_loss[k] = 0.0
             self.link_jitter[k] = 0.25
+        for k in self.link_delays:
+            self.link_delays[k] = self.base_link_delays.get(k, 2.0)
+        self._prev_delays.clear()
         self.port_rates.clear()
         self.flow_stats.clear()
         self.raw_flow_stats.clear()

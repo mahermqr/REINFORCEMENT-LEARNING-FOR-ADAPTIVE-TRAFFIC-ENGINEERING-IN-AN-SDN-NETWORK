@@ -568,20 +568,24 @@ class StateManager:
             self.release_dynamic_flow(fid)
         return len(expired)
 
-    def inject_core_congestion(self, utilization=0.95, core_nodes=None):
+    def inject_core_congestion(self, utilization=0.95, core_nodes=None, asymmetric_ratio=0.5):
         """
         Saturates core switch links to test lateral cross-link rerouting.
         Topology-Agnostic: dynamically identifies core / transit bottlenecks via
         metadata or networkx edge betweenness centrality.
+        When multiple core nodes exist, saturates the primary subset (asymmetric_ratio)
+        to simulate realistic elephant-flow hotspot bottlenecks rather than total gridlock.
         """
         target_edges = []
-        if core_nodes:
+        c_nodes = core_nodes or (self.active_core_nodes if hasattr(self, 'active_core_nodes') and self.active_core_nodes else None)
+        if c_nodes:
+            if len(c_nodes) > 1 and asymmetric_ratio is not None and asymmetric_ratio < 1.0:
+                subset_count = max(1, int(round(len(c_nodes) * asymmetric_ratio)))
+                jammed_cores = set(c_nodes[:subset_count])
+            else:
+                jammed_cores = set(c_nodes)
             for u, v in self.graph.edges():
-                if u in core_nodes or v in core_nodes:
-                    target_edges.append((u, v))
-        elif hasattr(self, 'active_core_nodes') and self.active_core_nodes:
-            for u, v in self.graph.edges():
-                if u in self.active_core_nodes or v in self.active_core_nodes:
+                if u in jammed_cores or v in jammed_cores:
                     target_edges.append((u, v))
         else:
             # Fallback: Automatic discovery via Edge Betweenness Centrality on arbitrary graph

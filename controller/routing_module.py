@@ -32,6 +32,7 @@ class RoutingModule:
             self.logger.info("[RoutingModule] Loaded pre-trained Double DQN checkpoint from %s", ckpt_path)
 
         # Asynchronous background training worker to prevent blocking OpenFlow PacketIn processing
+        self.model_lock = threading.Lock()
         self._training_active = False
         self._training_thread = None
         self.start_training_worker()
@@ -56,7 +57,8 @@ class RoutingModule:
             try:
                 time.sleep(2.0)
                 if hasattr(self.agent, 'memory') and len(self.agent.memory) >= 32:
-                    loss = self.agent.train(batch_size=32)
+                    with self.model_lock:
+                        loss = self.agent.train(batch_size=32)
                     if loss is not None:
                         self.logger.debug("[RoutingModule-Worker] Asynchronous DQN Loss: %.4f | Epsilon: %.3f", loss, self.agent.epsilon)
             except Exception as e:
@@ -102,7 +104,8 @@ class RoutingModule:
         t0 = time.time()
         state = self.state_manager.get_routing_state(dpid, dst_dpid)
         # Production traffic uses deterministic policy evaluation (explore=False)
-        action = self.agent.act(state, explore=False)
+        with self.model_lock:
+            action = self.agent.act(state, explore=False)
         decision_time_ms = (time.time() - t0) * 1000.0
         self.state_manager.record_decision_latency(decision_time_ms)
 
@@ -123,7 +126,8 @@ class RoutingModule:
             # Reward is calculated for previous action prev_a observed in current network state
             chosen_prev_path = prev_paths[prev_a % len(prev_paths)]
             reward = self._calculate_reward(chosen_prev_path)
-            self.agent.remember(prev_s, prev_a, reward, state, done=False)
+            with self.model_lock:
+                self.agent.remember(prev_s, prev_a, reward, state, done=False)
 
         self.prev_experience[exp_key] = (state, action, candidate_paths)
 

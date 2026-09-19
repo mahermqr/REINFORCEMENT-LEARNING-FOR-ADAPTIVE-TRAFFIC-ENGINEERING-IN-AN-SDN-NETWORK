@@ -129,11 +129,7 @@ def run_blind_topology_stress_tests():
         # TEST 1: Severe Core / Backbone Jamming (85% - 98% Saturation)
         # ---------------------------------------------------------------------
         print(f"\n[Test 1/5] Core/Backbone Jamming (Core nodes: {core_nodes})")
-        for u, v in sm.graph.edges():
-            if u in core_nodes or v in core_nodes:
-                sm.link_utilization[(u, v)] = random.uniform(0.85, 0.98)
-            else:
-                sm.link_utilization[(u, v)] = random.uniform(0.12, 0.28)
+        sm.inject_core_congestion(utilization=0.90, core_nodes=core_nodes, asymmetric_ratio=0.5)
 
         n_samples = 150
         t1_dqn_u, t1_spf_u, t1_dqn_lat, t1_spf_lat, t1_reroutes = [], [], [], [], 0
@@ -224,11 +220,12 @@ def run_blind_topology_stress_tests():
         # TEST 4: Dynamic Delay Degradation
         # ---------------------------------------------------------------------
         print(f"\n[Test 4/5] Dynamic Delay Degradation (Core Link Delay 10x Inflated)")
+        jammed_cores = set(core_nodes[:max(1, len(core_nodes)//2)]) if len(core_nodes) > 1 else set(core_nodes)
         for u, v in sm.graph.edges():
-            if u in core_nodes or v in core_nodes:
+            if u in jammed_cores or v in jammed_cores:
                 sm.link_delays[(u, v)] = 20.0
             else:
-                sm.link_delays[(u, v)] = 2.0
+                sm.link_delays[(u, v)] = sm.base_link_delays.get((u, v), 2.0)
 
         t4_dqn_lats, t4_spf_lats = [], []
         for _ in range(100):

@@ -66,7 +66,7 @@ class DQNRoutingAgent:
         self.tau = tau
 
         if self.use_per:
-            self.memory = PrioritizedReplayBuffer(capacity=memory_size)
+            self.memory = PrioritizedReplayBuffer(capacity=memory_size, state_size=state_size)
         else:
             self.memory = deque(maxlen=memory_size)
 
@@ -77,6 +77,7 @@ class DQNRoutingAgent:
         self.model = self._build_model().to(self.device)
         self.target_model = self._build_model().to(self.device)
         self.target_model.load_state_dict(self.model.state_dict())
+        self.model.eval()
         self.target_model.eval()
 
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
@@ -91,23 +92,21 @@ class DQNRoutingAgent:
         return DuelingQNetwork(self.state_size, self.action_size)
 
     def act(self, state, explore=True):
-        """Epsilon-greedy action selection."""
-        if explore and random.uniform(0, 1) <= self.epsilon:
+        """Epsilon-greedy action selection optimized for low decision latency."""
+        if explore and random.random() <= self.epsilon:
             return random.randrange(self.action_size)
 
-        state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
-        self.model.eval()
+        state_tensor = torch.as_tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
         with torch.no_grad():
             q_values = self.model(state_tensor)
-        self.model.train()
-        return torch.argmax(q_values[0]).item()
+        return int(torch.argmax(q_values[0]))
 
     def remember(self, state, action, reward, next_state, done):
         """Stores experience tuple in replay memory."""
-        s = np.array(state, dtype=np.float32)
+        s = np.asarray(state, dtype=np.float32)
         a = int(action)
         r = float(reward)
-        ns = np.array(next_state, dtype=np.float32)
+        ns = np.asarray(next_state, dtype=np.float32)
         d = bool(done)
 
         if self.use_per:
@@ -121,18 +120,29 @@ class DQNRoutingAgent:
             return None
 
         if self.use_per:
-            minibatch, idxs, is_weights = self.memory.sample(batch_size)
-            weights_tensor = torch.FloatTensor(is_weights).to(self.device)
+            if hasattr(self.memory, 'sample_tensors'):
+                tensor_batch = self.memory.sample_tensors(batch_size, device=self.device)
+                if tensor_batch is None:
+                    return None
+                states, actions, rewards, next_states, dones, idxs, weights_tensor = tensor_batch
+            else:
+                minibatch, idxs, is_weights = self.memory.sample(batch_size)
+                weights_tensor = torch.as_tensor(is_weights, dtype=torch.float32, device=self.device)
+                states = torch.as_tensor(np.array([t[0] for t in minibatch]), dtype=torch.float32, device=self.device)
+                actions = torch.as_tensor([t[1] for t in minibatch], dtype=torch.int64, device=self.device).unsqueeze(1)
+                rewards = torch.as_tensor([t[2] for t in minibatch], dtype=torch.float32, device=self.device)
+                next_states = torch.as_tensor(np.array([t[3] for t in minibatch]), dtype=torch.float32, device=self.device)
+                dones = torch.as_tensor([t[4] for t in minibatch], dtype=torch.float32, device=self.device)
         else:
             minibatch = random.sample(self.memory, batch_size)
             idxs, weights_tensor = None, None
+            states = torch.as_tensor(np.array([t[0] for t in minibatch]), dtype=torch.float32, device=self.device)
+            actions = torch.as_tensor([t[1] for t in minibatch], dtype=torch.int64, device=self.device).unsqueeze(1)
+            rewards = torch.as_tensor([t[2] for t in minibatch], dtype=torch.float32, device=self.device)
+            next_states = torch.as_tensor(np.array([t[3] for t in minibatch]), dtype=torch.float32, device=self.device)
+            dones = torch.as_tensor([t[4] for t in minibatch], dtype=torch.float32, device=self.device)
 
-        states = torch.FloatTensor(np.array([t[0] for t in minibatch])).to(self.device)
-        actions = torch.LongTensor([t[1] for t in minibatch]).unsqueeze(1).to(self.device)
-        rewards = torch.FloatTensor([t[2] for t in minibatch]).to(self.device)
-        next_states = torch.FloatTensor(np.array([t[3] for t in minibatch])).to(self.device)
-        dones = torch.FloatTensor([t[4] for t in minibatch]).to(self.device)
-
+        self.model.train()
         # Current Q-values: Q(s, a; theta)
         current_q = self.model(states).gather(1, actions).squeeze(1)
 
@@ -150,35 +160,33 @@ class DQNRoutingAgent:
         else:
             loss = self.criterion(current_q, expected_q)
 
-        self.optimizer.zero_grad()
+        self.optimizer.zero_grad(set_to_none=True)
         loss.backward()
         nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
         self.optimizer.step()
+        self.model.eval()
 
-        loss_val = loss.item()
+        loss_val = float(loss.item())
         self.loss_history.append(loss_val)
 
         # Decay exploration rate
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
 
-        # Continuous Polyak soft target update (Lillicrap et al. / DDPG / D3QN standard):
-        # Target network smoothly tracks the policy network without abrupt variance spikes:
+        # Continuous Polyak soft target update (in-place lerp_ primitive):
         # \theta_{target} \leftarrow \tau \theta_{policy} + (1 - \tau) \theta_{target}
         with torch.no_grad():
             for target_p, p in zip(self.target_model.parameters(), self.model.parameters()):
-                target_p.data.copy_(self.tau * p.data + (1.0 - self.tau) * target_p.data)
+                target_p.data.lerp_(p.data, self.tau)
 
         self.update_target_counter += 1
         return loss_val
 
     def get_q_values(self, state):
         """Returns raw Q-values for all candidate actions for a given state vector."""
-        state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
-        self.model.eval()
+        state_tensor = torch.as_tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
         with torch.no_grad():
             q_vals = self.model(state_tensor).squeeze(0).cpu().numpy()
-        self.model.train()
         return q_vals
 
     def save(self, filepath):

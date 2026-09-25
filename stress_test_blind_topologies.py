@@ -196,10 +196,21 @@ def run_blind_topology_stress_tests():
         print(f"\n[Test 3/5] Asymmetric Regional Hotspot Surge (Sub-Cluster Congestion)")
         hotspot_nodes = edge_nodes[:max(2, len(edge_nodes)//3)]
         for u, v in sm.graph.edges():
-            if u in hotspot_nodes:
-                sm.link_utilization[(u, v)] = 0.88
-            else:
-                sm.link_utilization[(u, v)] = 0.15
+            sm.link_utilization[(u, v)] = 0.15
+
+        # Saturate primary default uplinks connecting the hotspot cluster
+        for h in hotspot_nodes:
+            for other in edge_nodes:
+                if other not in hotspot_nodes:
+                    try:
+                        p = nx.shortest_path(sm.graph, h, other)
+                        if len(p) >= 2:
+                            sm.link_utilization[(p[0], p[1])] = 0.88
+                            if (p[1], p[0]) in sm.link_utilization:
+                                sm.link_utilization[(p[1], p[0])] = 0.88
+                    except Exception:
+                        pass
+                    break
 
         t3_dqn_u, t3_spf_u, t3_diversions = [], [], 0
         for _ in range(100):
@@ -330,11 +341,17 @@ def run_blind_topology_stress_tests():
     ax2.set_xticklabels(labels, rotation=15, ha='right', fontweight='bold')
     ax2.grid(True, linestyle=':', alpha=0.6)
 
-    # 3. Hotspot Relief
+    # 3. Hotspot Relief & Bypass Rate
     hotspot_relief = [results_summary[t]["scenario_3_hotspot_surge"]["bottleneck_reduction_pct"] for t in topo_order]
-    ax3.bar(x, hotspot_relief, color='#9b59b6', alpha=0.85, width=0.5)
-    ax3.set_title('Scenario 3: Asymmetric Hotspot Relief (% Load Reduction)', fontsize=11, fontweight='bold')
+    hotspot_bypass = [results_summary[t]["scenario_3_hotspot_surge"]["diversion_rate_pct"] for t in topo_order]
+    bars3 = ax3.bar(x, hotspot_relief, color='#9b59b6', alpha=0.85, width=0.5)
+    ax3.set_title('Scenario 3: Asymmetric Hotspot Relief & Bypass', fontsize=11, fontweight='bold')
     ax3.set_ylabel('Load Reduction (%)')
+    ax3.set_ylim(0, max(85, max(hotspot_relief) * 1.35 if max(hotspot_relief) > 0 else 100))
+    for i, b in enumerate(bars3):
+        h = b.get_height()
+        bp = hotspot_bypass[i]
+        ax3.text(b.get_x() + b.get_width()/2., h + 1.5, f"+{h:.1f}%\n({bp:.0f}% bypass)", ha='center', va='bottom', fontsize=8, fontweight='bold')
     ax3.set_xticks(x)
     ax3.set_xticklabels(labels, rotation=15, ha='right', fontweight='bold')
     ax3.grid(True, linestyle=':', alpha=0.6)

@@ -136,6 +136,8 @@ class RoutingModule:
 
         # Install OpenFlow 1.3 flow rules along the entire path
         self._install_path(selected_path, dst_port, eth_dst=dst_mac, ip_src=src_ip, ip_dst=dst_ip)
+        if src_ip and dst_ip:
+            self.state_manager.record_flow_path(dpid, src_ip, dst_ip, selected_path)
 
         # Forward the current packet out of the first hop
         first_hop = selected_path[1]

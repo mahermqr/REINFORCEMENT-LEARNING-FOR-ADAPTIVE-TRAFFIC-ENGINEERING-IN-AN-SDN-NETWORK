@@ -36,6 +36,7 @@ class StateManager:
 
         self.raw_flow_stats = {}    # (dpid, src_ip, dst_ip) -> {'bytes', 'packets', 'duration', 'timestamp'}
         self.flow_stats = {}        # (dpid, src_ip, dst_ip) -> {'mbps', 'pps', 'packets', 'bytes', 'duration'}
+        self.flow_paths = {}        # (dpid, src_ip, dst_ip) -> [hop1, hop2, ...]
 
         # OpenFlow Control Overhead Accounting (Proposal Objective 5)
         self.packet_in_count = 0
@@ -55,6 +56,28 @@ class StateManager:
 
         # Routing candidate path cache: (src_dpid, dst_dpid) -> list of candidate paths
         self._routing_path_cache = {}
+
+        # Active topology metadata tracking
+        self.current_topology_id = 'tree'
+        self.current_topology_meta = {'name': 'Hierarchical Tree (Baseline)', 'id': 'tree'}
+
+    def set_topology(self, topo_id, graph, meta):
+        """Sets active topology and initializes links, attributes, and routing cache."""
+        self.current_topology_id = topo_id
+        self.current_topology_meta = meta or {'name': topo_id, 'id': topo_id}
+        self.graph = graph.copy()
+        self.link_bandwidths.clear()
+        self.link_delays.clear()
+        self.link_jitter.clear()
+        self.link_loss.clear()
+        self.link_utilization.clear()
+        self._routing_path_cache.clear()
+        self.failed_links.clear()
+
+        for u, v, d in graph.edges(data=True):
+            cap = d.get('capacity', 100.0)
+            lat = d.get('delay', 2.0)
+            self.update_link(u, v, src_port=1, dst_port=1, capacity_mbps=cap, delay_ms=lat)
 
     # --------------------------------------------------------------------------
     # Topology & Host Management
@@ -196,8 +219,8 @@ class StateManager:
             mbps = (delta_bytes * 8.0) / (1e6 * dt)
             pps = delta_packets / dt
         else:
-            mbps = 0.0
-            pps = 0.0
+            mbps = (bytes_count * 8.0) / (1e6 * max(0.1, duration_sec)) if duration_sec > 0 else 0.0
+            pps = delta_packets / max(0.1, duration_sec) if duration_sec > 0 else 0.0
 
         self.raw_flow_stats[key] = {
             'packets': packets,
@@ -213,6 +236,31 @@ class StateManager:
             'bytes': bytes_count,
             'duration': duration_sec
         }
+
+    def record_flow_path(self, dpid, src_ip, dst_ip, path):
+        """Records the installed or simulated routing path decision for a flow."""
+        if not hasattr(self, 'flow_paths'):
+            self.flow_paths = {}
+        self.flow_paths[(dpid, src_ip, dst_ip)] = list(path)
+
+    def get_flow_records(self):
+        """Returns structured flow table telemetry for REST and dashboard display."""
+        records = []
+        flow_paths = getattr(self, 'flow_paths', {})
+        for (dpid, src_ip, dst_ip), stats in self.flow_stats.items():
+            path = flow_paths.get((dpid, src_ip, dst_ip), [])
+            path_str = " \u2192 ".join(f"s{n}" for n in path) if path else f"s{dpid}"
+            records.append({
+                'dpid': dpid,
+                'src_ip': src_ip,
+                'dst_ip': dst_ip,
+                'packets': stats.get('packets', 0),
+                'bytes': stats.get('bytes', 0),
+                'mbps': round(stats.get('mbps', 0.0), 2),
+                'pps': round(stats.get('pps', 0.0), 1),
+                'path': path_str
+            })
+        return records
 
     def update_link_latency(self, src_dpid, dst_dpid, delay_ms):
         """
@@ -346,7 +394,9 @@ class StateManager:
             'mean_jitter_ms': round(float(np.mean(jitters)), 3),
             'mean_packet_loss_pct': round(float(np.mean(losses)), 3),
             'active_flows_count': len(self.flow_stats),
-            'control_overhead': self.get_control_overhead_summary()
+            'control_overhead': self.get_control_overhead_summary(),
+            'current_topology': getattr(self, 'current_topology_id', 'tree'),
+            'topology_name': getattr(self, 'current_topology_meta', {}).get('name', 'Hierarchical Tree (Baseline)')
         }
         return summary
 
@@ -468,6 +518,11 @@ class StateManager:
         bytes_count = int((mbps * 1e6 * duration) / 8.0)
         packets = int(pps * duration)
         self.update_flow_stats(src_dpid, src_ip, dst_ip, packets, bytes_count, duration)
+        key = (src_dpid, src_ip, dst_ip)
+        self.flow_stats[key]['mbps'] = float(mbps)
+        self.flow_stats[key]['pps'] = float(pps)
+        if path:
+            self.record_flow_path(src_dpid, src_ip, dst_ip, path)
 
         if path and len(path) > 1:
             for i in range(len(path) - 1):
@@ -632,6 +687,7 @@ class StateManager:
         self._prev_delays.clear()
         self.port_rates.clear()
         self.flow_stats.clear()
+        self.flow_paths.clear()
         self.raw_flow_stats.clear()
         self.raw_port_stats.clear()
         self.restore_link()

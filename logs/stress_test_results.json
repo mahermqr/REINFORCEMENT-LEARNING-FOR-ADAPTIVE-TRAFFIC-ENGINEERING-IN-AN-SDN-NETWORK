@@ -1,32 +1,32 @@
 {
   "scenario_1_core_jamming": {
     "evaluated_flows": 200,
-    "dijkstra_spf_bottleneck_pct": 95.1,
-    "double_dqn_bottleneck_pct": 49.49,
-    "congestion_reduction_pct": 45.61,
+    "dijkstra_spf_bottleneck_pct": 95.77,
+    "double_dqn_bottleneck_pct": 58.64,
+    "congestion_reduction_pct": 37.13,
     "cross_link_offload_rate_pct": 100.0,
-    "dqn_latency_ms": 15.65,
+    "dqn_latency_ms": 11.18,
     "spf_latency_ms": 10.0
   },
   "scenario_2_concurrency_burst": {
     "burst_flows": 500,
-    "duration_ms": 151.8,
-    "throughput_decisions_per_sec": 3293.7,
-    "jains_fairness_dqn": 0.5,
-    "jains_fairness_spf": 0.375,
+    "duration_ms": 155.9,
+    "throughput_decisions_per_sec": 3206.4,
+    "jains_fairness_dqn": 1.0,
+    "jains_fairness_spf": 0.7746,
     "core_saturation_dqn_pct": 100.0,
     "core_saturation_spf_pct": 100.0
   },
   "scenario_3_asymmetric_pod_surge": {
     "ingress_load_pct": 85.0,
-    "direct_mesh_offload_pct": 100.0,
-    "bottleneck_reduction_pct": -1.83
+    "direct_mesh_offload_pct": 48.7,
+    "bottleneck_reduction_pct": 38.89
   },
   "scenario_4_latency_degradation": {
     "degraded_core_delay_ms": 20.0,
     "cross_link_delay_ms": 8.0,
-    "double_dqn_latency_ms": 44.0,
+    "double_dqn_latency_ms": 26.0,
     "spf_latency_ms": 80.0,
-    "latency_savings_ms": 36.0
+    "latency_savings_ms": 54.0
   }
 }

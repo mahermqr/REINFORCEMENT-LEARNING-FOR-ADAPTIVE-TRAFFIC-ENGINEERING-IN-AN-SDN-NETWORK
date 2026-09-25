@@ -291,13 +291,17 @@ def plot_convergence_dashboard(history, p1_end, p2_end, total_episodes):
 
     # 1. Episode Reward
     ax1 = axes[0, 0]
-    ax1.plot(history['episodes'], history['rewards'], color='#1f77b4', alpha=0.15)
+    ax1.plot(history['episodes'], history['rewards'], color='#1f77b4', alpha=0.10)
     ax1.plot(x_smooth, smooth(history['rewards']), color='#1f77b4', linewidth=2.0, label='DQN Reward (Smoothed)')
     ax1.axvline(p1_end, color='red', linestyle='--', alpha=0.7, label='Phase 1 Boundary')
     ax1.axvline(p2_end, color='green', linestyle='--', alpha=0.7, label='Phase 2 Boundary')
     ax1.set_title("DQN Reward Convergence (3-Phase Curriculum)", fontsize=11, fontweight='bold')
     ax1.set_ylabel("Reward")
     ax1.set_xlabel("Training Episodes")
+    r_smooth = smooth(history['rewards'])
+    y_min = max(-800.0, float(np.percentile(history['rewards'], 2)) * 0.7)
+    y_max = max(20.0, float(np.max(r_smooth)) * 1.5)
+    ax1.set_ylim(min(-400.0, y_min), y_max)
     ax1.grid(True, linestyle='--', alpha=0.4)
     ax1.legend(loc='lower right', fontsize=8)
 
@@ -323,16 +327,26 @@ def plot_convergence_dashboard(history, p1_end, p2_end, total_episodes):
     ax3.grid(True, linestyle='--', alpha=0.4)
     ax3.legend(loc='upper right', fontsize=8)
 
-    # 4. Latency, Jitter, and Packet Loss Convergence
+    # 4. Latency, Jitter, and Packet Loss Convergence (Dual Y-Axis)
     ax4 = axes[1, 1]
-    ax4.plot(x_smooth, smooth(history['latency_ms']), color='#ff7f0e', linewidth=1.8, label='Latency (ms)')
-    ax4.plot(x_smooth, smooth(history['jitter_ms']), color='#9467bd', linewidth=1.8, label='Jitter (ms)')
-    ax4.plot(x_smooth, smooth(history['packet_loss_pct']), color='#e377c2', linewidth=1.8, label='Packet Loss (%)')
+    l1 = ax4.plot(x_smooth, smooth(history['latency_ms']), color='#ff7f0e', linewidth=1.8, label='Latency (ms)')
+    l2 = ax4.plot(x_smooth, smooth(history['jitter_ms']), color='#9467bd', linewidth=1.8, label='Jitter (ms)')
     ax4.set_title("Latency, Jitter & Packet Loss Dynamics", fontsize=11, fontweight='bold')
-    ax4.set_ylabel("Metric Value")
+    ax4.set_ylabel("Delay & Jitter (ms)")
     ax4.set_xlabel("Training Episodes")
     ax4.grid(True, linestyle='--', alpha=0.4)
-    ax4.legend(loc='upper right', fontsize=8)
+
+    # Secondary Y-Axis for Packet Loss (%)
+    ax4_loss = ax4.twinx()
+    l3 = ax4_loss.plot(x_smooth, smooth(history['packet_loss_pct']), color='#e377c2', linewidth=2.0, linestyle='-.', label='Packet Loss (%)')
+    ax4_loss.set_ylabel("Packet Loss (%)", color='#c51b8a', fontweight='bold', fontsize=10)
+    ax4_loss.tick_params(axis='y', labelcolor='#c51b8a')
+    smooth_loss = smooth(history['packet_loss_pct'])
+    ax4_loss.set_ylim(0, max(4.0, float(np.max(smooth_loss)) * 1.35))
+
+    lines = l1 + l2 + l3
+    labels = [l.get_label() for l in lines]
+    ax4.legend(lines, labels, loc='upper right', fontsize=8)
 
     plt.suptitle("Deep Q-Network Adaptive Traffic Engineering: Training Progression & Metric Convergence\n(EC499 - University of Tripoli)", fontsize=13, fontweight='bold')
     plot_file = os.path.join(PLOTS_DIR, 'dqn_te_training_convergence.png')
@@ -341,6 +355,39 @@ def plot_convergence_dashboard(history, p1_end, p2_end, total_episodes):
     print(f"[Plot] Convergence dashboard saved to {plot_file}")
 
 
+def replot_convergence_from_csv(csv_path=None):
+    """Re-generates publication convergence figure directly from logged metrics CSV."""
+    if csv_path is None:
+        csv_path = os.path.join(LOGS_DIR, 'training_metrics.csv')
+    if not os.path.exists(csv_path):
+        print(f"Error: {csv_path} not found.")
+        return
+    history = {
+        'episodes': [], 'rewards': [], 'losses': [],
+        'dqn_bottleneck': [], 'spf_bottleneck': [],
+        'latency_ms': [], 'jitter_ms': [], 'packet_loss_pct': [], 'epsilons': []
+    }
+    with open(csv_path, 'r') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            history['episodes'].append(int(row['episode']))
+            history['rewards'].append(float(row['reward']))
+            history['losses'].append(float(row['loss']))
+            history['dqn_bottleneck'].append(float(row['dqn_bottleneck']))
+            history['spf_bottleneck'].append(float(row['spf_bottleneck']))
+            history['latency_ms'].append(float(row['latency_ms']))
+            history['jitter_ms'].append(float(row['jitter_ms']))
+            history['packet_loss_pct'].append(float(row['loss_pct']))
+            history['epsilons'].append(float(row['epsilon']))
+    episodes = len(history['episodes'])
+    p1_end = int(episodes * 0.25)
+    p2_end = int(episodes * 0.75)
+    plot_convergence_dashboard(history, p1_end, p2_end, episodes)
+
+
 if __name__ == '__main__':
-    episodes = int(sys.argv[1]) if len(sys.argv) > 1 else 1000
-    run_full_training(episodes=episodes)
+    if len(sys.argv) > 1 and sys.argv[1] == '--replot':
+        replot_convergence_from_csv()
+    else:
+        episodes = int(sys.argv[1]) if len(sys.argv) > 1 else 1000
+        run_full_training(episodes=episodes)

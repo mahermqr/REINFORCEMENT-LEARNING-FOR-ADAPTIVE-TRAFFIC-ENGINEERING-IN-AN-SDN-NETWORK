@@ -64,6 +64,8 @@ class DashboardServer:
                     self._send_json(state_manager.get_control_overhead_summary())
                 elif p == '/api/rl_metrics':
                     self._send_json(self._get_rl_data())
+                elif p == '/api/flows':
+                    self._send_json(state_manager.get_flow_records())
                 elif p == '/api/history':
                     self._send_json(list(state_manager.telemetry_history))
                 elif p == '/api/benchmarks':
@@ -164,64 +166,29 @@ class DashboardServer:
                 if not builder:
                     return f"Unknown topology: {topo_id}"
                 g_new, meta = builder()
-                state_manager.graph = g_new.copy()
-                state_manager.link_bandwidths.clear()
-                state_manager.link_delays.clear()
-                state_manager.link_jitter.clear()
-                state_manager.link_loss.clear()
-                state_manager.link_utilization.clear()
-                state_manager._routing_path_cache.clear()
-
-                for u, v, d in g_new.edges(data=True):
-                    cap = d.get('capacity', 100.0)
-                    lat = d.get('delay', 2.0)
-                    state_manager.update_link(u, v, src_port=1, dst_port=1, capacity_mbps=cap, delay_ms=lat)
+                state_manager.set_topology(topo_id, g_new, meta)
                 return f"Switched to {meta.get('name', topo_id)}"
 
             def _get_topology_data(self, topo_id=None):
-                if topo_id and topo_id in ALL_TOPOLOGY_BUILDERS:
-                    g_req, meta_req = ALL_TOPOLOGY_BUILDERS[topo_id]()
-                    pos_req = meta_req.get('positions', {})
-                    nodes_req = []
-                    for n, d in g_req.nodes(data=True):
-                        p = pos_req.get(n, {'x': 0.5, 'y': 0.5})
-                        nodes_req.append({
-                            'id': n,
-                            'label': d.get('label', f's{n}'),
-                            'type': d.get('type', 'edge'),
-                            'x': p['x'],
-                            'y': p['y'],
-                            'cpu': 0.1,
-                            'ram': 0.2
-                        })
-                    links_req = []
-                    for u, v, d in g_req.edges(data=True):
-                        if u < v or not g_req.has_edge(v, u):
-                            links_req.append({
-                                'source': u,
-                                'target': v,
-                                'utilization': round(d.get('util', 0.05) * 100, 1),
-                                'delay': round(d.get('delay', 2.0), 2),
-                                'capacity': d.get('capacity', 100.0)
-                            })
-                    return {'nodes': nodes_req, 'links': links_req, 'hosts': meta_req.get('hosts', []), 'meta': meta_req}
+                active_topo_id = getattr(state_manager, 'current_topology_id', 'tree')
+                target_topo_id = topo_id if (topo_id and topo_id in ALL_TOPOLOGY_BUILDERS) else active_topo_id
 
-                num_nodes = state_manager.graph.number_of_nodes()
-                current_meta = {}
-                for tid, bld in ALL_TOPOLOGY_BUILDERS.items():
-                    tg, tmeta = bld()
-                    if tg.number_of_nodes() == num_nodes:
-                        current_meta = tmeta
-                        break
+                builder = ALL_TOPOLOGY_BUILDERS.get(target_topo_id, ALL_TOPOLOGY_BUILDERS['tree'])
+                g_ref, meta = builder()
+                pos_map = meta.get('positions', {})
 
-                pos_map = current_meta.get('positions', {})
+                is_active = (target_topo_id == active_topo_id)
+                g_target = state_manager.graph if is_active else g_ref
+
                 nodes = []
-                for n, d in state_manager.graph.nodes(data=True):
+                for n, d in g_target.nodes(data=True):
                     p = pos_map.get(n, {'x': 0.5, 'y': 0.5})
+                    ref_label = g_ref.nodes[n].get('label', f's{n}') if g_ref.has_node(n) else d.get('label', f's{n}')
+                    ref_type = g_ref.nodes[n].get('type', 'edge') if g_ref.has_node(n) else d.get('type', 'edge')
                     nodes.append({
                         'id': n,
-                        'label': d.get('label', f's{n}'),
-                        'type': d.get('type', 'edge'),
+                        'label': ref_label,
+                        'type': ref_type,
                         'x': p['x'],
                         'y': p['y'],
                         'cpu': 0.1,
@@ -229,28 +196,40 @@ class DashboardServer:
                     })
 
                 links = []
-                for u, v in state_manager.graph.edges():
-                    if u < v or not state_manager.graph.has_edge(v, u):
+                for u, v in g_target.edges():
+                    if u < v or not g_target.has_edge(v, u):
+                        if is_active:
+                            util = round(state_manager.link_utilization.get((u, v), 0.05) * 100, 1)
+                            delay = round(state_manager.link_delays.get((u, v), 2.0), 2)
+                            jitter = round(state_manager.link_jitter.get((u, v), 0.25), 2)
+                            loss_pct = round(state_manager.link_loss.get((u, v), 0.0), 2)
+                            cap = state_manager.link_bandwidths.get((u, v), 100.0)
+                        else:
+                            ed = g_ref[u][v] if g_ref.has_edge(u, v) else {}
+                            util = round(ed.get('util', 0.05) * 100, 1)
+                            delay = round(ed.get('delay', 2.0), 2)
+                            jitter = 0.25
+                            loss_pct = 0.0
+                            cap = ed.get('capacity', 100.0)
+
                         links.append({
                             'source': u,
                             'target': v,
-                            'utilization': round(state_manager.link_utilization.get((u, v), 0.0) * 100, 1),
-                            'delay': round(state_manager.link_delays.get((u, v), 2.0), 2),
-                            'jitter': round(state_manager.link_jitter.get((u, v), 0.25), 2),
-                            'loss_pct': round(state_manager.link_loss.get((u, v), 0.0), 2),
-                            'capacity': state_manager.link_bandwidths.get((u, v), 100.0)
+                            'utilization': util,
+                            'delay': delay,
+                            'jitter': jitter,
+                            'loss_pct': loss_pct,
+                            'capacity': cap
                         })
 
-                hosts = []
-                for ip, (dpid, port) in state_manager.ip_to_location.items():
-                    hosts.append({
-                        'ip': ip,
-                        'mac': state_manager.host_ip_to_mac.get(ip, ''),
-                        'switch': dpid,
-                        'port': port
-                    })
-
-                return {'nodes': nodes, 'links': links, 'hosts': hosts, 'meta': current_meta}
+                hosts = meta.get('hosts', [])
+                return {
+                    'nodes': nodes,
+                    'links': links,
+                    'hosts': hosts,
+                    'meta': meta,
+                    'current_topology': active_topo_id
+                }
 
             def _get_stats_data(self):
                 return state_manager.get_network_te_summary()

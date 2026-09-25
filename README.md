@@ -29,7 +29,7 @@ This platform integrates a **Dueling Double Deep Q-Network (D3QN)** with **Prior
 | **Objective 5** | Evaluate performance using packet loss and control overhead metrics | M/M/1/K buffer overflow loss model and OpenFlow message accounting (`OFPPacketIn`, `OFPFlowMod`, decision latency) |
 | **Procedure 4** | Train DQN agent using synthetic traffic patterns to simulate load | Poisson burst generator, elephant flows, and core jamming stress tests (`topology/traffic_generator.sh`) |
 | **Procedure 5** | Benchmark RL agent against OSPF and greedy routing baselines | Automated tournament benchmark (`benchmark_routing_algorithms.py`) comparing DQN against OSPF (RFC 2328), Dijkstra SPF, ECMP, WSP, and LLR |
-| **Procedure 6** | Document findings and prepare final technical report and source code | Complete technical report (`docs/Project_Report_EC499.md`), 22 passing unit tests (`test_suite.py`), and publication plots in `logs/plots/` |
+| **Procedure 6** | Document findings and prepare final technical report and source code | Complete technical report (`docs/Project_Report_EC499.md`), 23 passing unit tests (`test_suite.py`), and publication plots in `logs/plots/` |
 
 ---
 
@@ -92,7 +92,7 @@ Evaluated under **closed-loop dynamic flow accumulation and lifecycle stepping**
 ├── docs/
 │   └── Project_Report_EC499.md         # Final Technical Graduation Report
 │
-├── test_suite.py                       # Unit & integration test suite (22 tests, 100% passing)
+├── test_suite.py                       # Unit & integration test suite (23 tests, 100% passing)
 ├── benchmark_routing_algorithms.py     # 5-topology head-to-head tournament benchmark
 ├── benchmark_evaluation.py             # 3-phase curriculum DQN training script
 ├── evaluate_random_blind_topology.py   # Zero-shot random dynamic topology evaluation
@@ -110,7 +110,7 @@ Evaluated under **closed-loop dynamic flow accumulation and lifecycle stepping**
 
 ## Quick Start & Verification
 
-### 1. Run Unit & Integration Tests (22 Tests)
+### 1. Run Unit & Integration Tests (23 Tests)
 ```bash
 /home/maher/ec499_env/bin/python test_suite.py -v
 ```

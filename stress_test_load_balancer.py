@@ -127,9 +127,13 @@ def run_stress_tests():
     print(" [TEST 2/4] HIGH-CONCURRENCY FLOW AVALANCHE (500 Simultaneous Flows)")
     print("-" * 80)
 
-    # Reset with heterogeneous random load across all links
-    link_loads_dqn = {e: 0.0 for e in sm.graph.edges()}
-    link_loads_spf = {e: 0.0 for e in sm.graph.edges()}
+    # Initialize baseline load across all links
+    for u, v in sm.graph.edges():
+        sm.link_utilization[(u, v)] = 0.05
+        sm.link_utilization[(v, u)] = 0.05
+
+    link_loads_dqn = {e: 0.05 for e in sm.graph.edges()}
+    link_loads_spf = {e: 0.05 for e in sm.graph.edges()}
 
     n_burst = 500
     t0 = time.time()
@@ -142,13 +146,18 @@ def run_stress_tests():
             s2_reroutes += 1
         spf_path = [src, 2 if src in [4, 5] else 3, 1, 3 if dst in [6, 7] else 2, dst]
 
-        # Accumulate simulated load (0.5 Mbps per active micro-flow)
+        # Accumulate simulated load (0.5 Mbps per active micro-flow) and update controller state
         for i in range(len(dqn_path) - 1):
             e = (dqn_path[i], dqn_path[i+1])
             link_loads_dqn[e] = min(1.0, link_loads_dqn[e] + 0.02)
+            link_loads_dqn[(e[1], e[0])] = link_loads_dqn[e]
+            sm.link_utilization[e] = link_loads_dqn[e]
+            sm.link_utilization[(e[1], e[0])] = link_loads_dqn[e]
+
         for i in range(len(spf_path) - 1):
             e = (spf_path[i], spf_path[i+1])
             link_loads_spf[e] = min(1.0, link_loads_spf[e] + 0.02)
+            link_loads_spf[(e[1], e[0])] = link_loads_spf[e]
 
     burst_duration = time.time() - t0
     throughput_flows_per_sec = n_burst / max(0.001, burst_duration)
@@ -168,12 +177,20 @@ def run_stress_tests():
     print(" [TEST 3/4] ASYMMETRIC POD SURGE (Pod 1 Ingress Saturated)")
     print("-" * 80)
 
-    # Saturate Pod 1 links (s4, s2) and keep Pod 2 cross links clear
+    # Initialize low baseline across all links
     for u, v in sm.graph.edges():
-        if u in [4, 2] or v in [4, 2]:
-            sm.link_utilization[(u, v)] = random.uniform(0.70, 0.92)
-        else:
-            sm.link_utilization[(u, v)] = random.uniform(0.10, 0.30)
+        sm.link_utilization[(u, v)] = random.uniform(0.12, 0.22)
+        sm.link_utilization[(v, u)] = sm.link_utilization[(u, v)]
+
+    # Saturate Pod 1 default aggregation tree uplinks (s4->s2, s5->s2, s2->s1)
+    for u, v in [(4, 2), (2, 4), (5, 2), (2, 5), (2, 1), (1, 2)]:
+        if (u, v) in sm.link_utilization:
+            sm.link_utilization[(u, v)] = random.uniform(0.85, 0.95)
+
+    # Keep lateral cross links clear
+    for u, v in cross_links:
+        sm.link_utilization[(u, v)] = random.uniform(0.12, 0.22)
+        sm.link_utilization[(v, u)] = sm.link_utilization[(u, v)]
 
     s3_dqn_u, s3_spf_u, s3_cross_picks = [], [], 0
     for _ in range(150):
@@ -185,7 +202,7 @@ def run_stress_tests():
         if 6 in path and 4 in path and (path.index(6) == path.index(4) + 1 or path.index(4) == path.index(6) + 1):
             s3_cross_picks += 1
 
-    print(f" • Pod 1 Ingress Load:              ~85% saturation on Switch s4-s2")
+    print(f" • Pod 1 Ingress Load:              ~85-95% saturation on Switch s4-s2 uplink")
     print(f" • Direct Cross-Link Utilization:   {s3_cross_picks / 150 * 100:.1f}% of Pod 1 flows took (s4 <-> s6) mesh link directly")
     print(f" • Bottleneck Reduction for Pod 1:  +{np.mean(s3_spf_u) - np.mean(s3_dqn_u):.2f}% load reduction")
 
@@ -240,27 +257,29 @@ def run_stress_tests():
     ax2.bar(['Dijkstra (SPF)', 'Double DQN'], [jain_spf, jain_dqn], color=['#d62728', '#2ca02c'], width=0.5, alpha=0.8)
     ax2.set_title("Test 2: Jain's Fairness Index (Load Uniformity)", fontweight='bold')
     ax2.set_ylabel("Jain's Index (Higher is Better)")
-    ax2.set_ylim(0, 1.05)
+    ax2.set_ylim(0, 1.15)
     for i, v in enumerate([jain_spf, jain_dqn]):
         ax2.text(i, v + 0.03, f"{v:.3f}", ha='center', fontweight='bold')
     ax2.grid(True, linestyle=':', alpha=0.6)
 
     # Plot 3: Pod 1 Surge
-    ax3.hist(s3_spf_u, bins=15, alpha=0.6, color='#d62728', label='Dijkstra SPF')
-    ax3.hist(s3_dqn_u, bins=15, alpha=0.7, color='#2ca02c', label='Double DQN (Cross-Offload)')
+    bins = np.linspace(10, 100, 25)
+    ax3.hist([s3_spf_u, s3_dqn_u], bins=bins, color=['#d62728', '#2ca02c'], label=['Dijkstra SPF (Congested)', 'Double DQN (Cross-Offload)'], alpha=0.85, rwidth=0.85)
     ax3.set_title('Test 3: Pod 1 Surge Bottleneck Distribution', fontweight='bold')
     ax3.set_xlabel('Bottleneck Load (%)')
-    ax3.set_ylabel('Frequency')
+    ax3.set_ylabel('Frequency (Flow Count)')
     ax3.legend()
     ax3.grid(True, linestyle=':', alpha=0.6)
 
     # Plot 4: Latency Degradation
+    max_lat = max(np.mean(s4_spf_lats), np.mean(s4_dqn_lats))
     ax4.bar(['Dijkstra (Degraded Core)', 'Double DQN (Bypass Path)'], [np.mean(s4_spf_lats), np.mean(s4_dqn_lats)],
             color=['#ff7f0e', '#1f77b4'], width=0.5, alpha=0.8)
     ax4.set_title('Test 4: Latency under Core Link Degradation', fontweight='bold')
     ax4.set_ylabel('End-to-End Latency (ms)')
+    ax4.set_ylim(0, max_lat * 1.20)
     for i, v in enumerate([np.mean(s4_spf_lats), np.mean(s4_dqn_lats)]):
-        ax4.text(i, v + 0.5, f"{v:.1f} ms", ha='center', fontweight='bold')
+        ax4.text(i, v + (max_lat * 0.03), f"{v:.1f} ms", ha='center', fontweight='bold')
     ax4.grid(True, linestyle=':', alpha=0.6)
 
     plt.suptitle('SDN Adaptive Load Balancer Stress Test & Resilience Dashboard', fontsize=14, fontweight='bold')

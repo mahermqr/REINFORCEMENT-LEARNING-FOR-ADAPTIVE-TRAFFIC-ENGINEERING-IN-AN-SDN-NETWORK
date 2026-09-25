@@ -285,10 +285,11 @@ def plot_proposal_tournament_figures(data, decision_timings):
     bars = ax6.bar(algos_short, mean_times, color=bar_colors, alpha=0.9)
     ax6.set_title("Metric 5: Controller Decision Time (ms)", fontsize=11, fontweight='bold')
     ax6.set_ylabel("Decision Execution Latency (ms)")
+    ax6.set_ylim(0, max(mean_times) * 1.30)
     ax6.grid(axis='y', linestyle='--', alpha=0.4)
     for b in bars:
         yval = b.get_height()
-        ax6.text(b.get_x() + b.get_width()/2.0, yval + 0.02, f"{yval:.2f}ms", ha='center', va='bottom', fontsize=8)
+        ax6.text(b.get_x() + b.get_width()/2.0, yval + 0.008, f"{yval:.2f}ms", ha='center', va='bottom', fontsize=8, fontweight='bold')
 
     # Common legend
     handles, labels = ax1.get_legend_handles_labels()
@@ -314,35 +315,45 @@ def plot_radar_summary(data):
     algos = ['OSPF (RFC 2328)', 'Dijkstra SPF', 'LLR (Least Loaded)', 'DQN (Ours)']
     colors = {'OSPF (RFC 2328)': '#7f7f7f', 'Dijkstra SPF': '#d62728', 'LLR (Least Loaded)': '#9467bd', 'DQN (Ours)': '#2ca02c'}
 
-    fig, ax = plt.subplots(figsize=(7, 7), subplot_kw=dict(polar=True))
+    # Dynamic scaling baselines across compared algorithms
+    all_lats = [float(np.mean(data['latency_ms'][a])) for a in algos]
+    all_jits = [float(np.mean(data['jitter_ms'][a])) for a in algos]
+    all_loss = [float(np.mean(data['packet_loss_pct'][a])) for a in algos]
+    all_util = [float(np.mean(data['bottleneck_util'][a])) for a in algos]
+
+    max_lat = max(all_lats) * 1.10
+    max_jit = max(all_jits) * 1.10
+    max_loss = max(all_loss) * 1.10
+    max_util = max(all_util) * 1.10
+
+    fig, ax = plt.subplots(figsize=(7.5, 7.5), subplot_kw=dict(polar=True))
 
     for algo in algos:
-        avg_b_util = np.mean(data['bottleneck_util'][algo])
-        avg_lat = np.mean(data['latency_ms'][algo])
-        avg_jit = np.mean(data['jitter_ms'][algo])
-        avg_loss = np.mean(data['packet_loss_pct'][algo])
-        avg_jain = np.mean(data['jains_fairness'][algo])
+        avg_b_util = float(np.mean(data['bottleneck_util'][algo]))
+        avg_lat = float(np.mean(data['latency_ms'][algo]))
+        avg_jit = float(np.mean(data['jitter_ms'][algo]))
+        avg_loss = float(np.mean(data['packet_loss_pct'][algo]))
+        avg_jain = float(np.mean(data['jains_fairness'][algo]))
 
-        # Normalize metrics to [0, 1] where 1.0 is best
-        score_relief = max(0.1, (100.0 - avg_b_util) / 75.0)
-        score_lat = max(0.1, 1.0 - (avg_lat / 60.0))
-        score_jit = max(0.1, 1.0 - (avg_jit / 25.0))
-        score_loss = max(0.1, 1.0 - (avg_loss / 30.0))
-        score_jain = min(1.0, avg_jain)
+        # Normalized to [0.12, 1.0] where 1.0 is optimal
+        score_relief = max(0.12, 1.0 - (avg_b_util / max_util))
+        score_lat = max(0.12, 1.0 - (avg_lat / max_lat))
+        score_jit = max(0.12, 1.0 - (avg_jit / max_jit))
+        score_loss = max(0.12, 1.0 - (avg_loss / max_loss))
+        score_jain = min(1.0, max(0.12, avg_jain))
 
         values = [score_relief, score_lat, score_jit, score_loss, score_jain]
-        values = [min(1.0, max(0.05, v)) for v in values]
         values += values[:1]
 
-        ax.plot(angles, values, color=colors[algo], linewidth=2.0, label=algo)
-        ax.fill(angles, values, color=colors[algo], alpha=0.15)
+        ax.plot(angles, values, color=colors[algo], linewidth=2.2, label=algo)
+        ax.fill(angles, values, color=colors[algo], alpha=0.12)
 
     ax.set_theta_offset(np.pi / 2)
     ax.set_theta_direction(-1)
     ax.set_thetagrids(np.degrees(angles[:-1]), labels, fontsize=10, fontweight='bold')
-    ax.set_ylim(0, 1.0)
+    ax.set_ylim(0, 1.05)
     ax.set_title("EC499 Proposal Objectives Radar Comparison\n(DQN vs Classical Routing Protocols)", fontsize=12, fontweight='bold', pad=25)
-    ax.legend(loc='lower right', bbox_to_anchor=(1.3, 0.0), fontsize=9)
+    ax.legend(loc='lower right', bbox_to_anchor=(1.35, -0.05), fontsize=9)
 
     radar_path = os.path.join(PLOTS_DIR, 'proposal_tournament_radar.png')
     plt.savefig(radar_path, dpi=300, bbox_inches='tight')

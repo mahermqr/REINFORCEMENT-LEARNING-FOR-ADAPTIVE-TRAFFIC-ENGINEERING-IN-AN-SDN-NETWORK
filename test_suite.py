@@ -213,6 +213,17 @@ class TestStateManager(unittest.TestCase):
         self.assertEqual(restored, 2) # Restores both directions
         self.assertTrue(self.sm.graph.has_edge(1, 2))
 
+    def test_flow_table_records(self):
+        self.sm.inject_traffic_flow("10.0.0.1", "10.0.0.3", 4, 3, mbps=25.0, pps=1800.0, path=[4, 1, 2, 3])
+        records = self.sm.get_flow_records()
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]['src_ip'], "10.0.0.1")
+        self.assertEqual(records[0]['dst_ip'], "10.0.0.3")
+        self.assertEqual(records[0]['dpid'], 4)
+        self.assertAlmostEqual(records[0]['mbps'], 25.0, places=1)
+        self.assertIn("s4", records[0]['path'])
+        self.assertIn("s3", records[0]['path'])
+
 
 class TestTraditionalRoutingBaselines(unittest.TestCase):
     """Verifies OSPF, Dijkstra SPF, ECMP, WSP, LLR and path metric computations."""
@@ -278,7 +289,26 @@ class TestMultiTopologySupport(unittest.TestCase):
             g, meta = get_topology(topo_id)
             self.assertGreater(g.number_of_nodes(), 0)
             self.assertGreater(g.number_of_edges(), 0)
-            self.assertTrue(nx.is_strongly_connected(g) or nx.is_weakly_connected(g))
+            self.assertTrue(nx.is_strongly_connected(g), f"Topology {topo_id} is not strongly connected")
+            # Verify coordinates
+            pos = meta.get('positions', {})
+            for n in g.nodes():
+                self.assertIn(n, pos, f"Node {n} missing position in {topo_id}")
+                self.assertGreaterEqual(pos[n]['x'], 0.0)
+                self.assertLessEqual(pos[n]['x'], 1.0)
+                self.assertGreaterEqual(pos[n]['y'], 0.0)
+                self.assertLessEqual(pos[n]['y'], 1.0)
+            # Verify link metrics
+            for u, v, d in g.edges(data=True):
+                self.assertGreater(d.get('capacity', 0), 0)
+                self.assertGreater(d.get('delay', 0), 0)
+            # Verify hosts
+            hosts = meta.get('hosts', [])
+            self.assertGreater(len(hosts), 0, f"Topology {topo_id} has no hosts")
+            for h in hosts:
+                self.assertIn('ip', h)
+                self.assertIn('switch', h)
+                self.assertIn(h['switch'], g.nodes(), f"Host switch {h['switch']} not in {topo_id}")
 
     def test_random_topology_generation(self):
         g, meta = build_random_topology(num_nodes=15, p_edge=0.30, seed=42)

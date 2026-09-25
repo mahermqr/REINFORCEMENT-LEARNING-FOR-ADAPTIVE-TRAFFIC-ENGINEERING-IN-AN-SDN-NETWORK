@@ -6,60 +6,94 @@
     <title>EC499: Reinforcement Learning for Adaptive Traffic Engineering in an SDN Network</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         :root {
-            --bg-base: #080c14;
-            --bg-card: rgba(15, 23, 42, 0.75);
-            --bg-card-hover: rgba(30, 41, 59, 0.85);
-            --border-glow: rgba(56, 189, 248, 0.25);
-            --border-subtle: rgba(255, 255, 255, 0.08);
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --text-dim: #64748b;
+            /* Neumorphism (Soft UI) Token System */
+            --bg-base: #E0E5EC;
+            --text-primary: #3D4852;
+            --text-muted: #6B7280;
+            --text-dim: #94A3B8;
 
-            --cyan: #38bdf8;
-            --cyan-glow: rgba(56, 189, 248, 0.4);
-            --emerald: #10b981;
-            --emerald-glow: rgba(16, 185, 129, 0.4);
-            --amber: #f59e0b;
-            --rose: #f43f5e;
-            --purple: #a855f7;
-            --indigo: #6366f1;
+            /* Interactive Accents */
+            --accent: #6C63FF;
+            --accent-light: #8B84FF;
+            --accent-secondary: #38B2AC;
+            --accent-amber: #DD6B20;
+            --accent-rose: #E53E3E;
+
+            /* Neumorphic Physics: Dual opposing RGBA shadows */
+            --shadow-extruded: 9px 9px 16px rgba(163, 177, 198, 0.6), -9px -9px 16px rgba(255, 255, 255, 0.5);
+            --shadow-extruded-hover: 12px 12px 20px rgba(163, 177, 198, 0.7), -12px -12px 20px rgba(255, 255, 255, 0.6);
+            --shadow-extruded-sm: 5px 5px 10px rgba(163, 177, 198, 0.6), -5px -5px 10px rgba(255, 255, 255, 0.5);
+            --shadow-extruded-sm-hover: 7px 7px 12px rgba(163, 177, 198, 0.7), -7px -7px 12px rgba(255, 255, 255, 0.6);
+
+            --shadow-inset: inset 6px 6px 10px rgba(163, 177, 198, 0.6), inset -6px -6px 10px rgba(255, 255, 255, 0.5);
+            --shadow-inset-deep: inset 10px 10px 20px rgba(163, 177, 198, 0.7), inset -10px -10px 20px rgba(255, 255, 255, 0.6);
+            --shadow-inset-sm: inset 3px 3px 6px rgba(163, 177, 198, 0.6), inset -3px -3px 6px rgba(255, 255, 255, 0.5);
+
+            /* Hyper-Rounded Radii */
+            --radius-container: 32px;
+            --radius-button: 16px;
+            --radius-inner: 12px;
+            --radius-pill: 9999px;
         }
 
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
-            font-family: 'Inter', -apple-system, sans-serif;
+            border: none;
+            outline: none;
             -webkit-font-smoothing: antialiased;
         }
 
         body {
             background-color: var(--bg-base);
-            background-image:
-                radial-gradient(circle at 15% 15%, rgba(56, 189, 248, 0.06) 0%, transparent 40%),
-                radial-gradient(circle at 85% 20%, rgba(168, 85, 247, 0.06) 0%, transparent 40%),
-                radial-gradient(circle at 50% 80%, rgba(16, 185, 129, 0.04) 0%, transparent 50%);
-            color: var(--text-main);
+            color: var(--text-primary);
+            font-family: 'DM Sans', -apple-system, sans-serif;
             min-height: 100vh;
-            padding: 24px;
-            overflow-x: hidden;
+            padding: 32px 24px;
+            max-width: 1440px;
+            margin: 0 auto;
+            scroll-behavior: smooth;
         }
 
-        .glass-panel {
-            background: var(--bg-card);
-            backdrop-filter: blur(18px);
-            -webkit-backdrop-filter: blur(18px);
-            border: 1px solid var(--border-subtle);
-            border-radius: 16px;
-            box-shadow: 0 12px 32px 0 rgba(0, 0, 0, 0.37);
-            transition: all 0.25s ease;
+        h1, h2, h3, h4, .font-display {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
         }
-        .glass-panel:hover {
-            border-color: rgba(255, 255, 255, 0.12);
+
+        /* Focus State with WCAG AAA Compliance */
+        button:focus-visible, select:focus-visible, a:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 3px;
+        }
+
+        /* Neumorphic Containers & Cards */
+        .neu-card {
+            background-color: var(--bg-base);
+            border-radius: var(--radius-container);
+            box-shadow: var(--shadow-extruded);
+            padding: 24px;
+            transition: transform 300ms ease-out, box-shadow 300ms ease-out;
+            margin-bottom: 24px;
+        }
+
+        .neu-well {
+            background-color: var(--bg-base);
+            border-radius: var(--radius-inner);
+            box-shadow: var(--shadow-inset);
+            padding: 16px;
+        }
+
+        .neu-well-deep {
+            background-color: var(--bg-base);
+            border-radius: 20px;
+            box-shadow: var(--shadow-inset-deep);
+            padding: 16px;
         }
 
         /* Header Bar */
@@ -67,55 +101,104 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 18px 24px;
-            margin-bottom: 20px;
-        }
-        .header-title-group h1 {
-            font-size: 1.4rem;
-            font-weight: 800;
-            background: linear-gradient(135deg, #ffffff 0%, var(--cyan) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            letter-spacing: -0.02em;
-        }
-        .header-subtitle {
-            font-size: 0.85rem;
-            color: var(--text-muted);
-            margin-top: 4px;
+            flex-wrap: wrap;
+            gap: 20px;
+            padding: 28px 32px;
+            position: relative;
+            overflow: hidden;
         }
 
-        .meta-badges {
-            display: flex;
-            gap: 10px;
-            align-items: center;
+        .header-content {
+            z-index: 2;
         }
-        .badge {
+
+        .header-title {
+            font-size: 1.55rem;
+            font-weight: 800;
+            line-height: 1.25;
+            margin-bottom: 6px;
+        }
+
+        .header-subtitle {
+            font-size: 0.88rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+        .header-subtitle b {
+            color: var(--text-primary);
+        }
+
+        /* Concentric Circles Tactile Artwork */
+        .decorative-concentric {
+            position: absolute;
+            right: -25px;
+            top: -25px;
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: var(--bg-base);
+            box-shadow: var(--shadow-extruded);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            animation: float 4s ease-in-out infinite;
+        }
+        .decorative-concentric .circle-inset {
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            background: var(--bg-base);
+            box-shadow: var(--shadow-inset);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .decorative-concentric .circle-core {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: var(--bg-base);
+            box-shadow: var(--shadow-extruded-sm);
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+
+        .status-badge-group {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            z-index: 2;
+        }
+
+        .neu-badge {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 0.78rem;
+            gap: 8px;
+            padding: 10px 18px;
+            border-radius: var(--radius-pill);
+            box-shadow: var(--shadow-inset-sm);
+            font-size: 0.82rem;
             font-weight: 600;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid var(--border-subtle);
+            color: var(--text-primary);
+            background: var(--bg-base);
         }
-        .badge.online {
-            background: rgba(16, 185, 129, 0.12);
-            color: var(--emerald);
-            border-color: rgba(16, 185, 129, 0.3);
-        }
-        .pulse-dot {
-            width: 7px;
-            height: 7px;
+
+        .pulse-indicator {
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
-            background: currentColor;
-            box-shadow: 0 0 8px currentColor;
-            animation: pulse 1.8s infinite;
+            background-color: var(--accent-secondary);
+            box-shadow: 0 0 6px rgba(56, 178, 172, 0.6);
+            animation: softPulse 2s infinite ease-in-out;
         }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.4; transform: scale(0.85); }
+
+        @keyframes softPulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.3); opacity: 0.5; }
         }
 
         /* Controls Strip */
@@ -124,434 +207,693 @@
             justify-content: space-between;
             align-items: center;
             flex-wrap: wrap;
-            gap: 12px;
-            padding: 14px 20px;
-            margin-bottom: 20px;
+            gap: 16px;
+            padding: 20px 28px;
         }
-        .btn-group {
+
+        .controls-left {
             display: flex;
-            gap: 8px;
+            align-items: center;
+            gap: 12px;
             flex-wrap: wrap;
         }
-        .btn {
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid var(--border-subtle);
-            color: var(--text-main);
-            padding: 8px 14px;
-            border-radius: 8px;
-            font-size: 0.82rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .btn:hover {
-            background: rgba(255, 255, 255, 0.12);
-            border-color: rgba(255, 255, 255, 0.2);
-            transform: translateY(-1px);
-        }
-        .btn-blue { background: rgba(56, 189, 248, 0.15); border-color: var(--cyan); color: var(--cyan); }
-        .btn-blue:hover { background: rgba(56, 189, 248, 0.25); box-shadow: 0 0 12px var(--cyan-glow); }
-        .btn-amber { background: rgba(245, 158, 11, 0.15); border-color: var(--amber); color: var(--amber); }
-        .btn-amber:hover { background: rgba(245, 158, 11, 0.25); }
-        .btn-red { background: rgba(244, 63, 94, 0.15); border-color: var(--rose); color: var(--rose); }
-        .btn-red:hover { background: rgba(244, 63, 94, 0.25); }
-        .btn-green { background: rgba(16, 185, 129, 0.15); border-color: var(--emerald); color: var(--emerald); }
-        .btn-green:hover { background: rgba(16, 185, 129, 0.25); }
-        .btn-purple { background: rgba(168, 85, 247, 0.15); border-color: var(--purple); color: var(--purple); }
 
-        select.select-box {
-            background: rgba(15, 23, 42, 0.9);
-            border: 1px solid var(--border-subtle);
-            color: var(--text-main);
-            padding: 8px 12px;
-            border-radius: 8px;
-            font-size: 0.82rem;
-            outline: none;
-            cursor: pointer;
-        }
-
-        /* Stats Strip */
-        .stats-strip {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
-        }
-        .stat-card {
-            padding: 16px;
-            position: relative;
-            overflow: hidden;
-        }
-        .stat-card::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 4px;
-            height: 100%;
-            background: var(--text-dim);
-        }
-        .stat-card.cyan::after { background: var(--cyan); box-shadow: 0 0 10px var(--cyan-glow); }
-        .stat-card.emerald::after { background: var(--emerald); box-shadow: 0 0 10px var(--emerald-glow); }
-        .stat-card.amber::after { background: var(--amber); }
-        .stat-card.rose::after { background: var(--rose); }
-        .stat-card.purple::after { background: var(--purple); }
-        .stat-card.indigo::after { background: var(--indigo); }
-
-        .stat-meta {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.75rem;
-            font-weight: 600;
+        .control-label {
+            font-size: 0.8rem;
+            font-weight: 700;
             color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            margin-bottom: 8px;
-        }
-        .stat-value {
-            font-size: 1.6rem;
-            font-weight: 800;
-            font-family: 'JetBrains Mono', monospace;
-            color: #ffffff;
-            margin-bottom: 4px;
-        }
-        .stat-sub {
-            font-size: 0.72rem;
-            color: var(--text-dim);
         }
 
-        /* Main Grid: Topology Canvas & Agent Intelligence */
-        .main-layout-grid {
+        /* Inset Select Box */
+        .neu-select {
+            background-color: var(--bg-base);
+            color: var(--text-primary);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.88rem;
+            font-weight: 600;
+            padding: 11px 20px;
+            border-radius: var(--radius-button);
+            box-shadow: var(--shadow-inset);
+            cursor: pointer;
+            transition: all 300ms ease-out;
+            min-height: 44px;
+        }
+        .neu-select:focus {
+            box-shadow: var(--shadow-inset-deep);
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+
+        /* Neumorphic Buttons */
+        .neu-btn {
+            background-color: var(--bg-base);
+            color: var(--text-primary);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.84rem;
+            font-weight: 600;
+            padding: 10px 18px;
+            border-radius: var(--radius-button);
+            box-shadow: var(--shadow-extruded-sm);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: transform 300ms ease-out, box-shadow 300ms ease-out, background-color 300ms ease-out;
+            min-height: 44px;
+            user-select: none;
+        }
+
+        .neu-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-extruded-sm-hover);
+        }
+
+        .neu-btn:active {
+            transform: translateY(0.5px);
+            box-shadow: var(--shadow-inset-sm);
+        }
+
+        /* Colored button variations with soft tone */
+        .neu-btn-surge:hover { color: var(--accent); }
+        .neu-btn-jam:hover { color: var(--accent-amber); }
+        .neu-btn-wcmp:hover { color: var(--accent-secondary); }
+        .neu-btn-sever:hover { color: var(--accent-rose); }
+        .neu-btn-restore:hover { color: var(--accent-secondary); }
+
+        /* Primary CTA: Accent Violet Button */
+        .neu-btn-primary {
+            background-color: var(--accent);
+            color: #ffffff;
+            box-shadow: 6px 6px 14px rgba(108, 99, 255, 0.4), -6px -6px 14px rgba(255, 255, 255, 0.7);
+        }
+        .neu-btn-primary:hover {
+            background-color: var(--accent-light);
+            box-shadow: 8px 8px 18px rgba(108, 99, 255, 0.5), -8px -8px 18px rgba(255, 255, 255, 0.8);
+            transform: translateY(-1px);
+            color: #ffffff;
+        }
+        .neu-btn-primary:active {
+            box-shadow: inset 4px 4px 8px rgba(0, 0, 0, 0.25), inset -4px -4px 8px rgba(255, 255, 255, 0.3);
+            transform: translateY(0.5px);
+        }
+
+        .neu-btn-stop {
+            background-color: var(--accent-rose);
+            color: #ffffff;
+            box-shadow: 6px 6px 14px rgba(229, 62, 62, 0.4), -6px -6px 14px rgba(255, 255, 255, 0.7);
+        }
+        .neu-btn-stop:hover {
+            background-color: #f56565;
+            color: #ffffff;
+        }
+
+        /* Quantitative Stats Cards Grid (Objectives 3, 4, 5) */
+        .stats-grid {
             display: grid;
-            grid-template-columns: 2fr 1fr;
+            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
             gap: 20px;
             margin-bottom: 24px;
         }
-        @media (max-width: 1024px) {
-            .main-layout-grid { grid-template-columns: 1fr; }
+
+        .stat-card {
+            background-color: var(--bg-base);
+            border-radius: var(--radius-container);
+            box-shadow: var(--shadow-extruded);
+            padding: 22px 24px;
+            transition: transform 300ms ease-out, box-shadow 300ms ease-out;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
         }
 
-        .panel-header {
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-extruded-hover);
+        }
+
+        .stat-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 16px 20px;
-            border-bottom: 1px solid var(--border-subtle);
+            margin-bottom: 14px;
         }
-        .panel-title {
-            font-size: 0.92rem;
+
+        .stat-objective-pill {
+            font-size: 0.72rem;
             font-weight: 700;
-            letter-spacing: -0.01em;
+            padding: 4px 10px;
+            border-radius: var(--radius-pill);
+            box-shadow: var(--shadow-inset-sm);
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .stat-icon-well {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: var(--bg-base);
+            box-shadow: var(--shadow-inset-sm);
             display: flex;
             align-items: center;
-            gap: 8px;
-        }
-        .panel-body {
-            padding: 16px 20px;
+            justify-content: center;
+            font-size: 1rem;
         }
 
-        /* Canvas */
+        .stat-title {
+            font-size: 0.84rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+
+        .stat-value {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 1.85rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+            margin-bottom: 4px;
+        }
+
+        .stat-subtext {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* Main Grid: Topology Canvas & Agent Intelligence */
+        .layout-main-grid {
+            display: grid;
+            grid-template-columns: 2.1fr 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+        @media (max-width: 1040px) {
+            .layout-main-grid { grid-template-columns: 1fr; }
+        }
+
+        .panel-heading-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 18px;
+        }
+
+        .panel-heading-row h2 {
+            font-size: 1.08rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Canvas Well */
+        .canvas-well {
+            background: var(--bg-base);
+            border-radius: 24px;
+            box-shadow: var(--shadow-inset-deep);
+            padding: 16px;
+            position: relative;
+        }
+
         #topoCanvas {
             width: 100%;
-            height: 380px;
+            height: 400px;
             display: block;
-            border-radius: 12px;
-            background: #050810;
+            border-radius: 16px;
         }
 
-        /* Charts */
+        /* Intelligence Side Panel */
+        .ai-metric-box {
+            background-color: var(--bg-base);
+            border-radius: var(--radius-inner);
+            box-shadow: var(--shadow-inset);
+            padding: 16px;
+            margin-bottom: 14px;
+        }
+
+        .ai-metric-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            letter-spacing: 0.05em;
+            margin-bottom: 4px;
+        }
+
+        .ai-metric-title {
+            font-size: 0.98rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .ai-metric-desc {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            margin-top: 3px;
+        }
+
+        .ai-twin-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .ai-stat-tile {
+            background-color: var(--bg-base);
+            border-radius: var(--radius-inner);
+            box-shadow: var(--shadow-inset);
+            padding: 14px;
+            text-align: center;
+        }
+
+        .ai-stat-tile .num {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--accent);
+            margin-top: 4px;
+        }
+
+        .formula-box {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.77rem;
+            color: var(--accent-amber);
+            line-height: 1.5;
+            padding: 8px 10px;
+            border-radius: 8px;
+            box-shadow: var(--shadow-inset-sm);
+            margin-top: 6px;
+            background: var(--bg-base);
+        }
+
+        /* Real-Time Charts Grid */
         .charts-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 20px;
+            gap: 24px;
             margin-bottom: 24px;
         }
         @media (max-width: 900px) {
             .charts-grid { grid-template-columns: 1fr; }
         }
-        .chart-box {
+
+        .chart-well {
+            background-color: var(--bg-base);
+            border-radius: 24px;
+            box-shadow: var(--shadow-inset);
+            padding: 16px;
+            height: 250px;
             position: relative;
-            height: 220px;
-            width: 100%;
         }
 
-        /* Table */
-        .table-responsive {
-            width: 100%;
+        /* Flow Table Telemetry */
+        .table-container-well {
+            background-color: var(--bg-base);
+            border-radius: 20px;
+            box-shadow: var(--shadow-inset);
+            padding: 8px 12px;
             overflow-x: auto;
         }
+
         table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 0.82rem;
+            font-size: 0.83rem;
             text-align: left;
         }
+
         th {
-            padding: 10px 16px;
+            padding: 12px 16px;
             color: var(--text-muted);
-            font-weight: 600;
-            border-bottom: 1px solid var(--border-subtle);
+            font-weight: 700;
             text-transform: uppercase;
-            font-size: 0.72rem;
+            font-size: 0.74rem;
             letter-spacing: 0.05em;
         }
+
         td {
-            padding: 12px 16px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            padding: 13px 16px;
             font-family: 'JetBrains Mono', monospace;
-        }
-        tr:hover td {
-            background: rgba(255, 255, 255, 0.02);
+            font-size: 0.82rem;
+            color: var(--text-primary);
         }
 
-        /* Tournament Benchmarks Strip */
-        .tournament-grid {
+        tbody tr {
+            transition: background-color 200ms ease;
+            border-radius: 8px;
+        }
+        tbody tr:hover {
+            background-color: rgba(163, 177, 198, 0.15);
+        }
+
+        /* Tournament Benchmarks Grid */
+        .tournament-summary-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
             gap: 16px;
         }
+
         .tournament-card {
-            padding: 14px;
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 10px;
-            border: 1px solid var(--border-subtle);
+            background-color: var(--bg-base);
+            border-radius: 20px;
+            box-shadow: var(--shadow-inset);
+            padding: 18px 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
         }
-        .tournament-label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 6px; }
-        .tournament-val { font-size: 1.4rem; font-weight: 700; margin-bottom: 4px; }
-        .tournament-sub { font-size: 0.72rem; color: var(--text-dim); }
+
+        .tournament-label {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+
+        .tournament-num {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 1.55rem;
+            font-weight: 800;
+            margin-bottom: 4px;
+        }
+
+        .tournament-detail {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+
+        /* Color Utility Tokens */
+        .color-accent { color: var(--accent); }
+        .color-teal { color: var(--accent-secondary); }
+        .color-amber { color: var(--accent-amber); }
+        .color-rose { color: var(--accent-rose); }
     </style>
 </head>
-
 <body>
-    <!-- Top Header Bar -->
-    <div class="glass-panel header-bar">
-        <div class="header-title-group">
-            <h1>Reinforcement Learning for Adaptive Traffic Engineering in an SDN Network (EC499)</h1>
-            <div class="header-subtitle">
-                Student: <b>Maher Abdulnasir Alqadhi</b> (2210249576) &nbsp;|&nbsp; Supervisor: <b>Dr. Suad El-Geder</b> &nbsp;|&nbsp; University of Tripoli &nbsp;|&nbsp; Spring 2026
-            </div>
+
+    <!-- Header Section (Neumorphic Elevated Surface) -->
+    <header class="neu-card header-bar">
+        <div class="header-content">
+            <h1 class="header-title">Reinforcement Learning for Adaptive Traffic Engineering in an SDN Network (EC499)</h1>
+            <p class="header-subtitle">
+                Student: <b>Maher Abdulnasir Alqadhi</b> (ID: 2210249576) &nbsp;•&nbsp; Supervisor: <b>Dr. Suad El-Geder</b> &nbsp;•&nbsp; University of Tripoli &nbsp;•&nbsp; Spring 2026
+            </p>
         </div>
-        <div class="meta-badges">
-            <div class="badge online">
-                <span class="pulse-dot"></span>
+
+        <div class="status-badge-group">
+            <div class="neu-badge">
+                <span class="pulse-indicator"></span>
                 <span>OpenFlow 1.3 Active</span>
             </div>
-            <div class="badge">
-                <span>D3QN Agent</span>
+            <div class="neu-badge">
+                <span style="color: var(--accent); font-weight: 800;">D3QN</span>
+                <span>Routing Engine</span>
             </div>
         </div>
-    </div>
+
+        <!-- Concentric Circles Ambient Motion Decoration -->
+        <div class="decorative-concentric" aria-hidden="true">
+            <div class="circle-inset">
+                <div class="circle-core"></div>
+            </div>
+        </div>
+    </header>
 
     <!-- Controls & Traffic Simulator Strip -->
-    <div class="glass-panel controls-strip">
-        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-            <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Topology:</span>
-            <select id="topoSelect" class="select-box" onchange="switchTopology(this.value)">
+    <section class="neu-card controls-strip">
+        <div class="controls-left">
+            <span class="control-label">Topology:</span>
+            <select id="topoSelect" class="neu-select" onchange="switchTopology(this.value)">
                 <option value="tree">Hierarchical Tree (7 Switches)</option>
                 <option value="fattree">Fat-Tree Clos Fabric (k=4, 20 Switches)</option>
                 <option value="abilene">Abilene US Backbone WAN (12 Switches)</option>
                 <option value="nsfnet">NSFNet Continental Mesh (14 Switches)</option>
                 <option value="spineleaf">Spine-Leaf Fabric (12 Switches)</option>
             </select>
-            <div class="btn-group">
-                <button class="btn btn-blue" onclick="triggerSim('traffic_burst')">⚡ Pod Surge</button>
-                <button class="btn btn-amber" onclick="triggerSim('core_jamming')">🔥 Jam Core Links (96%)</button>
-                <button class="btn btn-purple" onclick="triggerSim('wcmp')">⚖️ Multi-Path (WCMP)</button>
-                <button class="btn btn-red" onclick="triggerSim('link_failure')">💥 Sever Core Link</button>
-                <button class="btn btn-green" onclick="triggerSim('restore_links')">🔄 Restore Links</button>
-                <button class="btn" onclick="triggerSim('reset')">🔄 Nominal Reset</button>
+
+            <button class="neu-btn neu-btn-surge" onclick="triggerSim('traffic_burst')" title="Inject asymmetric ingress burst">
+                ⚡ Pod Surge
+            </button>
+            <button class="neu-btn neu-btn-jam" onclick="triggerSim('core_jamming')" title="Jam core switches to 96%">
+                🔥 Jam Core (96%)
+            </button>
+            <button class="neu-btn neu-btn-wcmp" onclick="triggerSim('wcmp')" title="Evaluate multi-path dispersion">
+                ⚖️ Multi-Path (WCMP)
+            </button>
+            <button class="neu-btn neu-btn-sever" onclick="triggerSim('link_failure')" title="Simulate physical core link outage">
+                💥 Sever Core Link
+            </button>
+            <button class="neu-btn neu-btn-restore" onclick="triggerSim('restore_links')" title="Restore broken link">
+                🔄 Restore Links
+            </button>
+            <button class="neu-btn" onclick="triggerSim('reset')" title="Reset to nominal network load">
+                🔄 Nominal Reset
+            </button>
+        </div>
+
+        <div>
+            <button id="btnAutoSim" class="neu-btn neu-btn-primary" onclick="toggleAutoSim()">
+                ▶️ Auto Traffic Simulation
+            </button>
+        </div>
+    </section>
+
+    <!-- 5 Proposal Quantitative Objectives Stats Grid -->
+    <section class="stats-grid">
+        <!-- Metric 1: Throughput -->
+        <div class="stat-card">
+            <div class="stat-header">
+                <span class="stat-objective-pill">Objective 4</span>
+                <div class="stat-icon-well color-accent">⚡</div>
+            </div>
+            <div>
+                <div class="stat-title">Network Throughput</div>
+                <div class="stat-value" id="statThroughput">0.0 Mbps</div>
+                <div class="stat-subtext">Aggregate data plane rate</div>
             </div>
         </div>
-        <div>
-            <button id="btnAutoSim" class="btn btn-blue" onclick="toggleAutoSim()">▶️ Auto Traffic Simulation</button>
-        </div>
-    </div>
 
-    <!-- Proposal Quantitative Metrics Strip (All 5 Objectives) -->
-    <div class="stats-strip">
-        <div class="glass-panel stat-card cyan">
-            <div class="stat-meta"><span>Objective 4</span><span>Throughput</span></div>
-            <div class="stat-value" id="statThroughput">0.0 Mbps</div>
-            <div class="stat-sub">Total data plane rate</div>
-        </div>
-
-        <div class="glass-panel stat-card amber">
-            <div class="stat-meta"><span>Objective 4</span><span>Peak Link</span></div>
-            <div class="stat-value" id="statBottleneck">0.0%</div>
-            <div class="stat-sub" id="statCongestionRelief">Bottleneck utilization</div>
+        <!-- Metric 2: Bottleneck Load -->
+        <div class="stat-card">
+            <div class="stat-header">
+                <span class="stat-objective-pill">Objective 4</span>
+                <div class="stat-icon-well color-amber">🔥</div>
+            </div>
+            <div>
+                <div class="stat-title">Bottleneck Link Load</div>
+                <div class="stat-value" id="statBottleneck">0.0%</div>
+                <div class="stat-subtext" id="statCongestionRelief">Max link utilization across fabric</div>
+            </div>
         </div>
 
-        <div class="glass-panel stat-card emerald">
-            <div class="stat-meta"><span>Objective 3</span><span>Latency</span></div>
-            <div class="stat-value" id="statLatency">0.0 ms</div>
-            <div class="stat-sub">Mean end-to-end path delay</div>
+        <!-- Metric 3: Mean Latency -->
+        <div class="stat-card">
+            <div class="stat-header">
+                <span class="stat-objective-pill">Objective 3</span>
+                <div class="stat-icon-well color-teal">⏱️</div>
+            </div>
+            <div>
+                <div class="stat-title">Mean End-to-End Latency</div>
+                <div class="stat-value" id="statLatency">0.0 ms</div>
+                <div class="stat-subtext">Hop-accumulated propagation delay</div>
+            </div>
         </div>
 
-        <div class="glass-panel stat-card purple">
-            <div class="stat-meta"><span>Objective 3</span><span>Jitter (RFC 3393)</span></div>
-            <div class="stat-value" id="statJitter">0.00 ms</div>
-            <div class="stat-sub">Packet delay variation EMA</div>
+        <!-- Metric 4: Jitter -->
+        <div class="stat-card">
+            <div class="stat-header">
+                <span class="stat-objective-pill">Objective 3</span>
+                <div class="stat-icon-well color-accent">〰️</div>
+            </div>
+            <div>
+                <div class="stat-title">Network Jitter (RFC 3393)</div>
+                <div class="stat-value" id="statJitter">0.00 ms</div>
+                <div class="stat-subtext">Packet delay variation (PDV) EMA</div>
+            </div>
         </div>
 
-        <div class="glass-panel stat-card rose">
-            <div class="stat-meta"><span>Objective 5</span><span>Packet Loss</span></div>
-            <div class="stat-value" id="statLoss">0.00%</div>
-            <div class="stat-sub">Queue buffer overflow loss</div>
+        <!-- Metric 5: Packet Loss -->
+        <div class="stat-card">
+            <div class="stat-header">
+                <span class="stat-objective-pill">Objective 5</span>
+                <div class="stat-icon-well color-rose">📉</div>
+            </div>
+            <div>
+                <div class="stat-title">Queue Packet Loss</div>
+                <div class="stat-value" id="statLoss">0.00%</div>
+                <div class="stat-subtext">M/M/1/K buffer overflow drops</div>
+            </div>
         </div>
 
-        <div class="glass-panel stat-card indigo">
-            <div class="stat-meta"><span>Objective 5</span><span>Control Overhead</span></div>
-            <div class="stat-value" id="statDecisionTime">0.00 ms</div>
-            <div class="stat-sub" id="statFlowMods">0 FlowMods installed</div>
+        <!-- Metric 6: Control Overhead -->
+        <div class="stat-card">
+            <div class="stat-header">
+                <span class="stat-objective-pill">Objective 5</span>
+                <div class="stat-icon-well" style="color: var(--text-primary);">🧠</div>
+            </div>
+            <div>
+                <div class="stat-title">Controller Inference Time</div>
+                <div class="stat-value" id="statDecisionTime">0.00 ms</div>
+                <div class="stat-subtext" id="statFlowMods">0 FlowMods installed</div>
+            </div>
         </div>
-    </div>
+    </section>
 
     <!-- Main Grid: Topology Canvas & Agent Intelligence -->
-    <div class="main-layout-grid">
-        <div class="glass-panel">
-            <div class="panel-header">
-                <div class="panel-title">🌐 Live OpenFlow 1.3 Topology & Link Utilization Telemetry</div>
-                <div style="font-size: 0.78rem; color: var(--text-dim);" id="topoStatsLabel">Rendering fabric...</div>
+    <main class="layout-main-grid">
+        <!-- Topology Visualization -->
+        <section class="neu-card">
+            <div class="panel-heading-row">
+                <h2>🌐 Live OpenFlow 1.3 Topology & Telemetry</h2>
+                <span class="stat-objective-pill" id="topoStatsLabel">Rendering fabric...</span>
             </div>
-            <div class="panel-body" style="padding: 12px;">
+            <div class="canvas-well">
                 <canvas id="topoCanvas"></canvas>
             </div>
-        </div>
+        </section>
 
-        <div class="glass-panel">
-            <div class="panel-header">
-                <div class="panel-title">🧠 Deep Q-Network Agent Intelligence (Objective 1)</div>
-                <div class="badge online"><span class="pulse-dot"></span><span>D3QN Active</span></div>
+        <!-- Deep Q-Network Intelligence -->
+        <aside class="neu-card">
+            <div class="panel-heading-row">
+                <h2>🧠 D3QN Agent Intelligence</h2>
+                <span class="stat-objective-pill" style="color: var(--accent);">Objective 1</span>
             </div>
-            <div class="panel-body" style="display: flex; flex-direction: column; gap: 16px;">
-                <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: 1px solid var(--border-subtle);">
-                    <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px;">Neural Architecture</div>
-                    <div style="font-size: 0.95rem; font-weight: 700; color: #ffffff;">Dueling Double Deep Q-Network (D3QN)</div>
-                    <div style="font-size: 0.75rem; color: var(--text-dim); margin-top: 2px;">Decouples State-Value V(s) from Path Advantages A(s, a)</div>
-                </div>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                    <div style="background: rgba(255,255,255,0.03); padding: 10px; border-radius: 8px;">
-                        <div style="font-size: 0.72rem; color: var(--text-muted);">Exploration (Epsilon)</div>
-                        <div style="font-size: 1.1rem; font-weight: 700; color: var(--cyan); font-family: monospace;" id="rlEpsilon">ε = 0.010</div>
-                    </div>
-                    <div style="background: rgba(255,255,255,0.03); padding: 10px; border-radius: 8px;">
-                        <div style="font-size: 0.72rem; color: var(--text-muted);">Execution Device</div>
-                        <div style="font-size: 1.1rem; font-weight: 700; color: var(--emerald); font-family: monospace;" id="rlDevice">CPU</div>
-                    </div>
-                </div>
+            <div class="ai-metric-box">
+                <div class="ai-metric-label">Neural Architecture</div>
+                <div class="ai-metric-title">Dueling Double Deep Q-Network (D3QN)</div>
+                <div class="ai-metric-desc">Decouples State-Value V(s) from Path Advantage Stream A(s, a).</div>
+            </div>
 
-                <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: 1px solid var(--border-subtle);">
-                    <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px;">Multi-Objective TE Reward Function</div>
-                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.76rem; color: var(--amber); line-height: 1.4;">
-                        R = - (0.35·Hops + 0.06·Delay + Φ_cong + 0.25·Jitter + 0.5·Loss)
-                    </div>
-                    <div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 4px;">Steep asymptotic barrier penalty applied when bottleneck load exceeds 70%.</div>
+            <div class="ai-twin-grid">
+                <div class="ai-stat-tile">
+                    <div class="ai-metric-label">Exploration</div>
+                    <div class="num" id="rlEpsilon">ε = 0.010</div>
                 </div>
-
-                <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 8px; border: 1px solid var(--border-subtle);">
-                    <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px;">Jain's Fairness Index</div>
-                    <div style="font-size: 1.2rem; font-weight: 700; color: var(--emerald);" id="statJains">0.996</div>
-                    <div style="font-size: 0.72rem; color: var(--text-dim);">Uniformity of link utilization across topology edges.</div>
+                <div class="ai-stat-tile">
+                    <div class="ai-metric-label">Execution</div>
+                    <div class="num color-teal" id="rlDevice">CPU</div>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <!-- Real-time Charts: Throughput & Latency/Jitter -->
-    <div class="charts-grid">
-        <div class="glass-panel">
-            <div class="panel-header">
-                <div class="panel-title">📈 Real-Time Network Throughput & Bottleneck Link Load</div>
+            <div class="ai-metric-box">
+                <div class="ai-metric-label">Multi-Objective TE Reward</div>
+                <div class="formula-box">
+                    R = - (0.35·Hops + 0.06·Delay + Φ_cong + 0.25·Jitter + 0.5·Loss)
+                </div>
+                <div class="ai-metric-desc" style="margin-top: 6px;">
+                    Asymptotic barrier penalty Φ_cong penalizes links exceeding 70% load.
+                </div>
             </div>
-            <div class="panel-body">
-                <div class="chart-box"><canvas id="chartThroughput"></canvas></div>
+
+            <div class="ai-metric-box">
+                <div class="ai-metric-label">Jain's Fairness Index</div>
+                <div class="stat-value color-teal" style="font-size: 1.45rem;" id="statJains">0.996</div>
+                <div class="ai-metric-desc">Load uniformity index across network edges.</div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- Real-Time Charts Grid -->
+    <section class="charts-grid">
+        <div class="neu-card">
+            <div class="panel-heading-row">
+                <h2>📈 Real-Time Throughput & Bottleneck Load</h2>
+            </div>
+            <div class="chart-well">
+                <canvas id="chartThroughput"></canvas>
             </div>
         </div>
 
-        <div class="glass-panel">
-            <div class="panel-header">
-                <div class="panel-title">📉 End-to-End Latency & Network Jitter (RFC 3393 Delay Variation)</div>
+        <div class="neu-card">
+            <div class="panel-heading-row">
+                <h2>📉 End-to-End Latency & Network Jitter (RFC 3393)</h2>
             </div>
-            <div class="panel-body">
-                <div class="chart-box"><canvas id="chartLatencyJitter"></canvas></div>
+            <div class="chart-well">
+                <canvas id="chartLatencyJitter"></canvas>
             </div>
         </div>
-    </div>
+    </section>
 
     <!-- Active OpenFlow Flow Table -->
-    <div class="glass-panel" style="margin-bottom: 24px;">
-        <div class="panel-header">
-            <div class="panel-title">📊 Active OpenFlow 1.3 Switch Flow Table Telemetry</div>
-            <div style="font-size: 0.8rem; color: var(--text-muted);" id="activeFlowCountLabel">0 active flows</div>
+    <section class="neu-card">
+        <div class="panel-heading-row">
+            <h2>📊 Active OpenFlow 1.3 Flow Table Telemetry</h2>
+            <span class="stat-objective-pill" id="activeFlowCountLabel">0 active flows</span>
         </div>
-        <div class="panel-body" style="padding: 0;">
-            <div class="table-responsive">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Switch DPID</th>
-                            <th>Source IP</th>
-                            <th>Destination IP</th>
-                            <th>Packets</th>
-                            <th>Bytes</th>
-                            <th>Rate (Mbps)</th>
-                            <th>Rate (PPS)</th>
-                            <th>Routing Path Decision</th>
-                        </tr>
-                    </thead>
-                    <tbody id="flowTableBody">
-                        <tr><td colspan="8" style="text-align: center; color: var(--text-dim); padding: 24px;">Click "⚡ Pod Surge" to inject traffic flows.</td></tr>
-                    </tbody>
-                </table>
+        <div class="table-container-well">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Switch DPID</th>
+                        <th>Source IP</th>
+                        <th>Destination IP</th>
+                        <th>Packets</th>
+                        <th>Bytes</th>
+                        <th>Rate (Mbps)</th>
+                        <th>Rate (PPS)</th>
+                        <th>Routing Path Decision</th>
+                    </tr>
+                </thead>
+                <tbody id="flowTableBody">
+                    <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 24px;">Click "⚡ Pod Surge" to inject live traffic flows.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- Head-to-Head Tournament Highlights -->
+    <section class="neu-card">
+        <div class="panel-heading-row">
+            <h2>🏆 Head-to-Head Tournament Highlights: DQN vs Classical Protocols</h2>
+            <span class="stat-objective-pill color-teal">5 Topologies Evaluated</span>
+        </div>
+        <div class="tournament-summary-grid">
+            <div class="tournament-card">
+                <div class="tournament-label">Congestion Relief</div>
+                <div class="tournament-num color-teal">+26.2%</div>
+                <div class="tournament-detail">Peak bottleneck link load reduction versus OSPF</div>
+            </div>
+            <div class="tournament-card">
+                <div class="tournament-label">Latency Reduction</div>
+                <div class="tournament-num color-accent">73.5% Faster</div>
+                <div class="tournament-detail">15.98 ms DQN vs 60.48 ms OSPF on NSFNet WAN</div>
+            </div>
+            <div class="tournament-card">
+                <div class="tournament-label">Jitter Suppression (RFC 3393)</div>
+                <div class="tournament-num color-accent">&gt; 97% Lower</div>
+                <div class="tournament-detail">1.10 ms DQN vs 52.27 ms congested OSPF</div>
+            </div>
+            <div class="tournament-card">
+                <div class="tournament-label">Packet Loss Elimination</div>
+                <div class="tournament-num color-rose">&lt; 0.02%</div>
+                <div class="tournament-detail">Zero buffer overflow drops under severe bursts</div>
+            </div>
+            <div class="tournament-card">
+                <div class="tournament-label">Controller Decision Speed</div>
+                <div class="tournament-num color-amber">2,439 dps</div>
+                <div class="tournament-detail">0.41 ms average inference latency per flow</div>
             </div>
         </div>
-    </div>
+    </section>
 
-    <!-- Classical Tournament Benchmark Highlights (Procedure 5) -->
-    <div class="glass-panel">
-        <div class="panel-header">
-            <div class="panel-title">🏆 Head-to-Head Tournament Highlights: DQN vs OSPF & Greedy Baselines (EC499)</div>
-            <div style="font-size: 0.8rem; color: var(--emerald); font-weight:600;">5 Topologies Evaluated</div>
-        </div>
-        <div class="panel-body">
-            <div class="tournament-grid">
-                <div class="tournament-card">
-                    <div class="tournament-label">Congestion Relief</div>
-                    <div class="tournament-val" style="color: var(--emerald);">+26.2%</div>
-                    <div class="tournament-sub">Peak bottleneck load reduction vs OSPF</div>
-                </div>
-                <div class="tournament-card">
-                    <div class="tournament-label">Latency Reduction</div>
-                    <div class="tournament-val" style="color: var(--cyan);">73.5% Faster</div>
-                    <div class="tournament-sub">15.98 ms DQN vs 60.48 ms OSPF on NSFNet</div>
-                </div>
-                <div class="tournament-card">
-                    <div class="tournament-label">Jitter Suppression (RFC 3393)</div>
-                    <div class="tournament-val" style="color: var(--purple);">&gt; 97% Lower</div>
-                    <div class="tournament-sub">1.10 ms DQN vs 52.27 ms congested OSPF</div>
-                </div>
-                <div class="tournament-card">
-                    <div class="tournament-label">Packet Loss Elimination</div>
-                    <div class="tournament-val" style="color: var(--rose);">&lt; 0.02%</div>
-                    <div class="tournament-sub">Buffer drops mitigated under traffic bursts</div>
-                </div>
-                <div class="tournament-card">
-                    <div class="tournament-label">Controller Decision Speed</div>
-                    <div class="tournament-val" style="color: var(--amber);">2,439 dps</div>
-                    <div class="tournament-sub">0.41 ms average inference latency</div>
-                </div>
-            </div>
-        </div>
-    </div>
-
+    <!-- JavaScript Application Logic -->
     <script>
         let autoSimActive = false;
         let autoSimTimer = null;
-        let chartThroughput, chartLatencyJitter;
+        let chartThroughput = null, chartLatencyJitter = null;
+        let lastTopoData = null;
         const historyLength = 20;
         const timeLabels = [];
         const dataThroughput = [];
@@ -559,28 +901,57 @@
         const dataLatency = [];
         const dataJitter = [];
 
-        // Canvas Setup
+        // Canvas Setup for Soft UI Styling
         const canvas = document.getElementById('topoCanvas');
         const ctx = canvas.getContext('2d');
 
         function resizeCanvas() {
-            canvas.width = canvas.parentElement.clientWidth;
-            canvas.height = canvas.parentElement.clientHeight || 380;
+            const parent = canvas.parentElement;
+            if (parent) {
+                const w = Math.floor(parent.clientWidth || 800);
+                const h = Math.floor(parent.clientHeight || 480);
+                if (canvas.width !== w || canvas.height !== h) {
+                    canvas.width = w;
+                    canvas.height = h;
+                    if (lastTopoData) drawTopology(lastTopoData);
+                }
+            }
         }
         window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
 
-        // Chart.js Init
+        // Chart.js Neumorphic Theme Setup
         function initCharts() {
+            if (chartThroughput) {
+                chartThroughput.destroy();
+                chartThroughput = null;
+            }
+            if (chartLatencyJitter) {
+                chartLatencyJitter.destroy();
+                chartLatencyJitter = null;
+            }
+
             const chartDefaults = {
                 responsive: true,
                 maintainAspectRatio: false,
                 animation: { duration: 300 },
                 scales: {
-                    x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b', font: { size: 10 } } },
-                    y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b', font: { size: 10 } } }
+                    x: {
+                        grid: { color: 'rgba(163, 177, 198, 0.35)', lineWidth: 1 },
+                        ticks: { color: '#6B7280', font: { family: "'DM Sans', sans-serif", size: 10 } }
+                    },
+                    y: {
+                        grid: { color: 'rgba(163, 177, 198, 0.35)', lineWidth: 1 },
+                        ticks: { color: '#6B7280', font: { family: "'DM Sans', sans-serif", size: 10 } }
+                    }
                 },
-                plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } }
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: '#3D4852',
+                            font: { family: "'Plus Jakarta Sans', sans-serif", size: 11, weight: 600 }
+                        }
+                    }
+                }
             };
 
             const ctx1 = document.getElementById('chartThroughput').getContext('2d');
@@ -589,8 +960,24 @@
                 data: {
                     labels: timeLabels,
                     datasets: [
-                        { label: 'Total Throughput (Mbps)', data: dataThroughput, borderColor: '#38bdf8', backgroundColor: 'rgba(56, 189, 248, 0.1)', fill: true, tension: 0.3 },
-                        { label: 'Bottleneck Utilization (%)', data: dataBottleneck, borderColor: '#f59e0b', backgroundColor: 'transparent', borderDash: [4, 4], tension: 0.3 }
+                        {
+                            label: 'Total Throughput (Mbps)',
+                            data: dataThroughput,
+                            borderColor: '#6C63FF',
+                            backgroundColor: 'rgba(108, 99, 255, 0.15)',
+                            fill: true,
+                            tension: 0.35,
+                            borderWidth: 2.5
+                        },
+                        {
+                            label: 'Bottleneck Utilization (%)',
+                            data: dataBottleneck,
+                            borderColor: '#DD6B20',
+                            backgroundColor: 'transparent',
+                            borderDash: [5, 4],
+                            tension: 0.35,
+                            borderWidth: 2
+                        }
                     ]
                 },
                 options: chartDefaults
@@ -602,8 +989,23 @@
                 data: {
                     labels: timeLabels,
                     datasets: [
-                        { label: 'Mean Latency (ms)', data: dataLatency, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true, tension: 0.3 },
-                        { label: 'Network Jitter (ms)', data: dataJitter, borderColor: '#a855f7', backgroundColor: 'transparent', tension: 0.3 }
+                        {
+                            label: 'Mean Latency (ms)',
+                            data: dataLatency,
+                            borderColor: '#38B2AC',
+                            backgroundColor: 'rgba(56, 178, 172, 0.15)',
+                            fill: true,
+                            tension: 0.35,
+                            borderWidth: 2.5
+                        },
+                        {
+                            label: 'Network Jitter (ms)',
+                            data: dataJitter,
+                            borderColor: '#8B84FF',
+                            backgroundColor: 'transparent',
+                            tension: 0.35,
+                            borderWidth: 2
+                        }
                     ]
                 },
                 options: chartDefaults
@@ -611,15 +1013,34 @@
         }
         initCharts();
 
-        // Fetch Telemetry Poll Loop
-        async function fetchTelemetry() {
+        // Restore saved topology preference from localStorage on page reload
+        const savedTopo = localStorage.getItem('sdn_active_topo');
+        const topoSelectEl = document.getElementById('topoSelect');
+        if (savedTopo && topoSelectEl) {
+            topoSelectEl.value = savedTopo;
+        }
+
+        // Telemetry Polling Loop
+        async function fetchTelemetry(forcedTopoId) {
             try {
-                const [statsRes, topoRes, ctrlRes, rlRes] = await Promise.all([
+                const topoSelect = document.getElementById('topoSelect');
+                const activeTopoId = forcedTopoId || (topoSelect ? topoSelect.value : null) || localStorage.getItem('sdn_active_topo') || 'tree';
+
+                const [statsRes, topoRes, ctrlRes, rlRes, flowsRes] = await Promise.all([
                     fetch('/api/stats').then(r => r.json()),
-                    fetch('/api/topology').then(r => r.json()),
+                    fetch(`/api/topology?topo=${encodeURIComponent(activeTopoId)}`).then(r => r.json()),
                     fetch('/api/control_overhead').then(r => r.json()),
-                    fetch('/api/rl_metrics').then(r => r.json())
+                    fetch('/api/rl_metrics').then(r => r.json()),
+                    fetch('/api/flows').then(r => r.json()).catch(() => [])
                 ]);
+
+                // Synchronize dropdown state with active controller topology to fix reload bug
+                if (topoSelect && topoRes.current_topology) {
+                    if (topoSelect.value !== topoRes.current_topology) {
+                        topoSelect.value = topoRes.current_topology;
+                    }
+                    localStorage.setItem('sdn_active_topo', topoRes.current_topology);
+                }
 
                 // Update Stats Strip
                 document.getElementById('statThroughput').innerText = `${statsRes.total_throughput_mbps.toFixed(1)} Mbps`;
@@ -635,8 +1056,38 @@
                 document.getElementById('rlEpsilon').innerText = `ε = ${rlRes.router_epsilon.toFixed(3)}`;
                 document.getElementById('rlDevice').innerText = rlRes.router_device.toUpperCase();
 
-                // Update Charts
-                const nowStr = new Date().toLocaleTimeString();
+                // Update Flow Table Telemetry
+                const flowTbody = document.getElementById('flowTableBody');
+                const flowCountLabel = document.getElementById('activeFlowCountLabel');
+                if (flowsRes && flowsRes.length > 0) {
+                    if (flowCountLabel) {
+                        flowCountLabel.innerText = `${flowsRes.length} active flow${flowsRes.length > 1 ? 's' : ''}`;
+                    }
+                    if (flowTbody) {
+                        flowTbody.innerHTML = flowsRes.map(f => `
+                            <tr>
+                                <td><span style="font-weight: 700; color: var(--accent);">s${f.dpid}</span></td>
+                                <td><code style="color: var(--text-primary);">${f.src_ip}</code></td>
+                                <td><code style="color: var(--text-primary);">${f.dst_ip}</code></td>
+                                <td>${f.packets.toLocaleString()}</td>
+                                <td>${(f.bytes / 1024).toFixed(1)} KB</td>
+                                <td><span class="color-teal" style="font-weight: 700;">${f.mbps.toFixed(2)}</span></td>
+                                <td>${f.pps.toFixed(1)}</td>
+                                <td><span style="background: var(--bg-base); padding: 4px 10px; border-radius: 8px; box-shadow: var(--shadow-inset-sm); font-size: 0.76rem; font-weight: 600; color: var(--accent);">${f.path}</span></td>
+                            </tr>
+                        `).join('');
+                    }
+                } else {
+                    if (flowCountLabel) {
+                        flowCountLabel.innerText = `0 active flows`;
+                    }
+                    if (flowTbody) {
+                        flowTbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 24px;">Click "⚡ Pod Surge" to inject live traffic flows.</td></tr>`;
+                    }
+                }
+
+                // Update Chart Histories
+                const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                 timeLabels.push(nowStr);
                 dataThroughput.push(statsRes.total_throughput_mbps);
                 dataBottleneck.push(statsRes.bottleneck_utilization_pct);
@@ -653,102 +1104,166 @@
                 chartThroughput.update();
                 chartLatencyJitter.update();
 
-                // Render Topology
+                // Draw Molded Neumorphic Topology
                 drawTopology(topoRes);
 
             } catch (err) {
-                console.warn("Telemetry fetch pending:", err);
+                console.warn("Telemetry polling active:", err);
             }
         }
-        setInterval(fetchTelemetry, 2500);
+        setInterval(() => fetchTelemetry(), 2500);
         fetchTelemetry();
 
-        // Draw Network Topology Graph
+        // Draw Soft UI Molded Topology Graph
         function drawTopology(topo) {
             if (!topo || !topo.nodes) return;
+            lastTopoData = topo;
+            resizeCanvas();
+
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             const w = canvas.width;
             const h = canvas.height;
             const nodeCoords = {};
 
-            // Calculate Node Positions
+            // Calculate Node Coordinates with padding
             topo.nodes.forEach((n, i) => {
-                const x = n.x ? (n.x * (w - 100) + 50) : (w / 2 + Math.cos(i * 2 * Math.PI / topo.nodes.length) * (w / 3));
-                const y = n.y ? (n.y * (h - 80) + 40) : (h / 2 + Math.sin(i * 2 * Math.PI / topo.nodes.length) * (h / 3));
-                nodeCoords[n.id] = { x, y, label: n.label || `s${n.id}`, type: n.type };
+                const x = (typeof n.x === 'number') ? (n.x * (w - 120) + 60) : (w / 2 + Math.cos(i * 2 * Math.PI / topo.nodes.length) * (w / 3));
+                const y = (typeof n.y === 'number') ? (n.y * (h - 100) + 50) : (h / 2 + Math.sin(i * 2 * Math.PI / topo.nodes.length) * (h / 3));
+                nodeCoords[n.id] = { x, y, label: n.label || `s${n.id}`, type: n.type || 'edge' };
             });
 
-            // Draw Links
-            topo.links.forEach(link => {
+            // 1. Draw Links with Shadows and Load Gradients
+            const showAllTags = (topo.links.length <= 16);
+            topo.links.forEach((link, idx) => {
                 const s = nodeCoords[link.source];
                 const t = nodeCoords[link.target];
                 if (!s || !t) return;
 
                 const util = link.utilization || 0;
-                let strokeColor = '#10b981';
-                let lineWidth = 2;
-                if (util > 70) { strokeColor = '#f43f5e'; lineWidth = 4; }
-                else if (util > 40) { strokeColor = '#f59e0b'; lineWidth = 3; }
+                let strokeColor = '#38B2AC'; // Teal (healthy)
+                let lineWidth = 2.5;
+
+                if (util > 70) {
+                    strokeColor = '#E53E3E'; // Rose (congested)
+                    lineWidth = 4.5;
+                } else if (util > 35) {
+                    strokeColor = '#DD6B20'; // Amber (moderate)
+                    lineWidth = 3.2;
+                }
 
                 ctx.beginPath();
                 ctx.moveTo(s.x, s.y);
                 ctx.lineTo(t.x, t.y);
                 ctx.strokeStyle = strokeColor;
                 ctx.lineWidth = lineWidth;
+                ctx.lineCap = 'round';
                 ctx.stroke();
 
-                // Draw Utilization & Latency Tag
-                const midX = (s.x + t.x) / 2;
-                const midY = (s.y + t.y) / 2;
-                ctx.fillStyle = '#0f172a';
-                ctx.fillRect(midX - 22, midY - 10, 44, 18);
-                ctx.strokeStyle = strokeColor;
-                ctx.lineWidth = 1;
-                ctx.strokeRect(midX - 22, midY - 10, 44, 18);
+                // Stagger pill placement along the link line [0.28 to 0.72] to prevent overlapping clumps
+                const frac = 0.28 + ((link.source * 7 + link.target * 13) % 7) * 0.065;
+                const midX = s.x + (t.x - s.x) * frac;
+                const midY = s.y + (t.y - s.y) * frac;
 
-                ctx.fillStyle = '#f8fafc';
-                ctx.font = '10px "JetBrains Mono", monospace';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(`${util.toFixed(0)}%`, midX, midY - 1);
+                // Draw utilization tag if link is active/congested, or if network is sparse
+                if (showAllTags || util > 20 || (idx % 3 === 0 && util > 5)) {
+                    ctx.save();
+                    ctx.fillStyle = '#E0E5EC';
+                    ctx.shadowColor = 'rgba(163, 177, 198, 0.6)';
+                    ctx.shadowBlur = 4;
+                    ctx.shadowOffsetX = 2;
+                    ctx.shadowOffsetY = 2;
+
+                    ctx.beginPath();
+                    ctx.roundRect(midX - 18, midY - 9, 36, 18, 9);
+                    ctx.fill();
+                    ctx.restore();
+
+                    ctx.fillStyle = (util > 70) ? '#E53E3E' : (util > 35 ? '#DD6B20' : '#2D3748');
+                    ctx.font = '700 9px "JetBrains Mono", monospace';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(`${util.toFixed(0)}%`, midX, midY + 0.5);
+                }
             });
 
-            // Draw Switches (Nodes)
+            // 2. Draw Switches (Molded Ceramic Discs with Dual Soft Shadow)
             Object.values(nodeCoords).forEach(node => {
+                const radius = 20;
+
+                // Dark Bottom-Right Shadow
+                ctx.save();
+                ctx.shadowColor = 'rgba(163, 177, 198, 0.75)';
+                ctx.shadowBlur = 8;
+                ctx.shadowOffsetX = 4;
+                ctx.shadowOffsetY = 4;
                 ctx.beginPath();
-                ctx.arc(node.x, node.y, 18, 0, 2 * Math.PI);
-                ctx.fillStyle = '#0f172a';
+                ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI);
+                ctx.fillStyle = '#E0E5EC';
                 ctx.fill();
-                ctx.strokeStyle = '#38bdf8';
-                ctx.lineWidth = 2.5;
+                ctx.restore();
+
+                // Light Top-Left Shadow
+                ctx.save();
+                ctx.shadowColor = 'rgba(255, 255, 255, 0.85)';
+                ctx.shadowBlur = 8;
+                ctx.shadowOffsetX = -4;
+                ctx.shadowOffsetY = -4;
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI);
+                ctx.fillStyle = '#E0E5EC';
+                ctx.fill();
+                ctx.restore();
+
+                // Inner Disc with Subtle Role Accent Ring
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, radius - 2, 0, 2 * Math.PI);
+                ctx.fillStyle = '#E0E5EC';
+                ctx.fill();
+
+                let ringColor = 'rgba(108, 99, 255, 0.4)'; // Spine / Core
+                if (node.type === 'leaf' || node.type === 'edge') {
+                    ringColor = 'rgba(56, 178, 172, 0.45)'; // Leaf / Edge
+                } else if (node.type === 'agg') {
+                    ringColor = 'rgba(74, 85, 104, 0.35)'; // Aggregation
+                }
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, radius - 1.5, 0, 2 * Math.PI);
+                ctx.strokeStyle = ringColor;
+                ctx.lineWidth = 1.5;
                 ctx.stroke();
 
-                ctx.fillStyle = '#ffffff';
-                ctx.font = 'bold 11px Inter, sans-serif';
+                // Node Label Text
+                ctx.fillStyle = '#2D3748';
+                const fontSize = node.label.length >= 6 ? '9px' : '11px';
+                ctx.font = `700 ${fontSize} "Plus Jakarta Sans", sans-serif`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(node.label, node.x, node.y);
             });
 
-            document.getElementById('topoStatsLabel').innerText = `${topo.nodes.length} switches, ${topo.links.length} directed links`;
+            const topoName = (topo.meta && topo.meta.name) ? topo.meta.name : 'Active Fabric';
+            document.getElementById('topoStatsLabel').innerText = `${topo.nodes.length} switches, ${topo.links.length} links • ${topoName}`;
         }
 
         // Trigger Interactive Simulation Action
         async function triggerSim(action) {
             try {
-                const res = await fetch(`/api/simulate/${action}`, { method: 'POST' }).then(r => r.json());
-                fetchTelemetry();
+                await fetch(`/api/simulate/${action}`, { method: 'POST' });
+                await fetchTelemetry();
             } catch (err) {
-                console.error("Simulation trigger failed:", err);
+                console.error("Simulation action failed:", err);
             }
         }
 
         // Switch Topology
         async function switchTopology(topoId) {
             try {
-                await fetch(`/api/simulate/switch_topology?topo=${topoId}`);
-                fetchTelemetry();
+                localStorage.setItem('sdn_active_topo', topoId);
+                const topoSelect = document.getElementById('topoSelect');
+                if (topoSelect) topoSelect.value = topoId;
+                await fetch(`/api/simulate/switch_topology?topo=${encodeURIComponent(topoId)}`);
+                await fetchTelemetry(topoId);
             } catch (err) {
                 console.error("Switch topology failed:", err);
             }
@@ -760,7 +1275,7 @@
             const btn = document.getElementById('btnAutoSim');
             if (autoSimActive) {
                 btn.innerText = "⏹️ Stop Auto Simulation";
-                btn.className = "btn btn-red";
+                btn.className = "neu-btn neu-btn-stop";
                 let step = 0;
                 const modes = ['traffic_burst', 'core_jamming', 'wcmp', 'reset'];
                 autoSimTimer = setInterval(() => {
@@ -769,7 +1284,7 @@
                 }, 4000);
             } else {
                 btn.innerText = "▶️ Auto Traffic Simulation";
-                btn.className = "btn btn-blue";
+                btn.className = "neu-btn neu-btn-primary";
                 clearInterval(autoSimTimer);
                 triggerSim('reset');
             }
